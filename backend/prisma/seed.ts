@@ -227,7 +227,12 @@ async function main() {
   for (const sub of cseSubjects) {
     const subject = await prisma.subject.upsert({
       where: { code: sub.code },
-      update: {},
+      update: {
+        conceptsCovered: sub.concepts,
+        totalHoursRequired: sub.totalHours,
+        courseDurationWeeks: sub.duration,
+        weeklyClassesRequired: sub.weekly,
+      },
       create: {
         name: sub.name,
         code: sub.code,
@@ -242,7 +247,107 @@ async function main() {
     createdCseSubjects.push(subject);
   }
 
-  console.log('Created subjects');
+  console.log('Created CSE subjects');
+
+  // Create ECE subjects
+  const eceSubjects = [
+    { 
+      name: 'Digital Electronics', 
+      code: 'ECE201', 
+      semester: 1, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'Number Systems and Logic Gates', estimatedHours: 14 },
+        { topic: 'Combinational Circuits', estimatedHours: 16 },
+        { topic: 'Sequential Circuits', estimatedHours: 18 },
+        { topic: 'Memory and PLDs', estimatedHours: 16 }
+      ]
+    },
+    { 
+      name: 'Signals and Systems', 
+      code: 'ECE202', 
+      semester: 1, 
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: 'Signal Classification', estimatedHours: 10 },
+        { topic: 'Fourier Series and Transform', estimatedHours: 14 },
+        { topic: 'Laplace Transform', estimatedHours: 12 },
+        { topic: 'Z-Transform', estimatedHours: 12 }
+      ]
+    },
+    { 
+      name: 'Electronic Circuits', 
+      code: 'ECE203', 
+      semester: 1, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'Diodes and Rectifiers', estimatedHours: 12 },
+        { topic: 'BJT Amplifiers', estimatedHours: 16 },
+        { topic: 'FET and MOSFET', estimatedHours: 16 },
+        { topic: 'Operational Amplifiers', estimatedHours: 20 }
+      ]
+    },
+    { 
+      name: 'Communication Systems', 
+      code: 'ECE301', 
+      semester: 3, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'Amplitude Modulation', estimatedHours: 14 },
+        { topic: 'Frequency Modulation', estimatedHours: 14 },
+        { topic: 'Digital Modulation', estimatedHours: 18 },
+        { topic: 'Communication Systems', estimatedHours: 18 }
+      ]
+    },
+    { 
+      name: 'Microprocessors', 
+      code: 'ECE302', 
+      semester: 3, 
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: '8086 Architecture', estimatedHours: 12 },
+        { topic: 'Assembly Language', estimatedHours: 14 },
+        { topic: 'Interfacing', estimatedHours: 12 },
+        { topic: 'Microcontrollers', estimatedHours: 10 }
+      ]
+    },
+  ];
+
+  const createdEceSubjects = [];
+  for (const sub of eceSubjects) {
+    const subject = await prisma.subject.upsert({
+      where: { code: sub.code },
+      update: {
+        conceptsCovered: sub.concepts,
+        totalHoursRequired: sub.totalHours,
+        courseDurationWeeks: sub.duration,
+        weeklyClassesRequired: sub.weekly,
+      },
+      create: {
+        name: sub.name,
+        code: sub.code,
+        departmentId: eceDept.id,
+        semester: sub.semester,
+        weeklyClassesRequired: sub.weekly,
+        courseDurationWeeks: sub.duration,
+        totalHoursRequired: sub.totalHours,
+        conceptsCovered: sub.concepts,
+      },
+    });
+    createdEceSubjects.push(subject);
+  }
+
+  console.log('Created ECE subjects');
 
   // Assign subjects to faculties
   const cseFaculties = await prisma.faculty.findMany({
@@ -262,6 +367,27 @@ async function main() {
       create: {
         facultyId: faculty.id,
         subjectId: createdCseSubjects[i].id,
+      },
+    });
+  }
+
+  const eceFaculties = await prisma.faculty.findMany({
+    where: { departmentId: eceDept.id },
+  });
+
+  for (let i = 0; i < createdEceSubjects.length; i++) {
+    const faculty = eceFaculties[i % eceFaculties.length];
+    await prisma.facultySubject.upsert({
+      where: {
+        facultyId_subjectId: {
+          facultyId: faculty.id,
+          subjectId: createdEceSubjects[i].id,
+        },
+      },
+      update: {},
+      create: {
+        facultyId: faculty.id,
+        subjectId: createdEceSubjects[i].id,
       },
     });
   }
@@ -293,13 +419,38 @@ async function main() {
     },
   });
 
+  // Create ECE batches
+  const batchECE1A = await prisma.batch.upsert({
+    where: { id: 'batch-ece-1a' },
+    update: {},
+    create: {
+      id: 'batch-ece-1a',
+      name: 'ECE 1st Semester - Section A',
+      departmentId: eceDept.id,
+      semester: 1,
+      batchSize: 50,
+    },
+  });
+
+  const batchECE3A = await prisma.batch.upsert({
+    where: { id: 'batch-ece-3a' },
+    update: {},
+    create: {
+      id: 'batch-ece-3a',
+      name: 'ECE 3rd Semester - Section A',
+      departmentId: eceDept.id,
+      semester: 3,
+      batchSize: 48,
+    },
+  });
+
   console.log('Created batches');
 
   // Assign subjects to batches
-  const sem3Subjects = createdCseSubjects.filter((s) => s.semester === 3);
-  const sem5Subjects = createdCseSubjects.filter((s) => s.semester === 5);
+  const cseSem3Subjects = createdCseSubjects.filter((s) => s.semester === 3);
+  const cseSem5Subjects = createdCseSubjects.filter((s) => s.semester === 5);
 
-  for (const subject of sem3Subjects) {
+  for (const subject of cseSem3Subjects) {
     await prisma.batchSubject.upsert({
       where: {
         batchId_subjectId: {
@@ -315,7 +466,7 @@ async function main() {
     });
   }
 
-  for (const subject of sem5Subjects) {
+  for (const subject of cseSem5Subjects) {
     await prisma.batchSubject.upsert({
       where: {
         batchId_subjectId: {
@@ -326,6 +477,41 @@ async function main() {
       update: {},
       create: {
         batchId: batch5A.id,
+        subjectId: subject.id,
+      },
+    });
+  }
+
+  const eceSem1Subjects = createdEceSubjects.filter((s) => s.semester === 1);
+  const eceSem3Subjects = createdEceSubjects.filter((s) => s.semester === 3);
+
+  for (const subject of eceSem1Subjects) {
+    await prisma.batchSubject.upsert({
+      where: {
+        batchId_subjectId: {
+          batchId: batchECE1A.id,
+          subjectId: subject.id,
+        },
+      },
+      update: {},
+      create: {
+        batchId: batchECE1A.id,
+        subjectId: subject.id,
+      },
+    });
+  }
+
+  for (const subject of eceSem3Subjects) {
+    await prisma.batchSubject.upsert({
+      where: {
+        batchId_subjectId: {
+          batchId: batchECE3A.id,
+          subjectId: subject.id,
+        },
+      },
+      update: {},
+      create: {
+        batchId: batchECE3A.id,
         subjectId: subject.id,
       },
     });

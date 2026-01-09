@@ -14,11 +14,17 @@ export const generateTimetables = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const { semester, name } = req.body;
+    const { semester, name, departmentId } = req.body;
+
+    // Build where clause for batches
+    const whereClause: any = { semester };
+    if (departmentId) {
+      whereClause.departmentId = departmentId;
+    }
 
     // Fetch all necessary data
     const batches = await prisma.batch.findMany({
-      where: { semester },
+      where: whereClause,
       include: {
         subjects: {
           include: {
@@ -42,7 +48,10 @@ export const generateTimetables = async (req: AuthRequest, res: Response) => {
     });
 
     if (batches.length === 0) {
-      return res.status(404).json({ error: 'No batches found for this semester' });
+      const message = departmentId 
+        ? 'No batches found for this branch and semester'
+        : 'No batches found for this semester';
+      return res.status(404).json({ error: message });
     }
 
     const classrooms = await prisma.classroom.findMany({
@@ -106,7 +115,7 @@ export const getTimetables = async (req: AuthRequest, res: Response) => {
       },
     }));
 
-    res.json(formattedTimetables);
+    res.json({ timetables: formattedTimetables });
   } catch (error) {
     console.error('Get timetables error:', error);
     res.status(500).json({ error: 'Internal server error' });
