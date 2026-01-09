@@ -148,11 +148,79 @@ async function main() {
 
   // Create subjects
   const cseSubjects = [
-    { name: 'Data Structures', code: 'CSE201', semester: 3, weekly: 4 },
-    { name: 'Algorithms', code: 'CSE202', semester: 3, weekly: 3 },
-    { name: 'Database Management', code: 'CSE203', semester: 3, weekly: 4 },
-    { name: 'Operating Systems', code: 'CSE301', semester: 5, weekly: 4 },
-    { name: 'Computer Networks', code: 'CSE302', semester: 5, weekly: 3 },
+    { 
+      name: 'Data Structures', 
+      code: 'CSE201', 
+      semester: 3, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'Arrays and Linked Lists', estimatedHours: 12 },
+        { topic: 'Stacks and Queues', estimatedHours: 10 },
+        { topic: 'Trees and Graphs', estimatedHours: 20 },
+        { topic: 'Sorting and Searching', estimatedHours: 12 },
+        { topic: 'Advanced Data Structures', estimatedHours: 10 }
+      ]
+    },
+    { 
+      name: 'Algorithms', 
+      code: 'CSE202', 
+      semester: 3, 
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: 'Algorithm Analysis', estimatedHours: 10 },
+        { topic: 'Divide and Conquer', estimatedHours: 12 },
+        { topic: 'Dynamic Programming', estimatedHours: 14 },
+        { topic: 'Greedy Algorithms', estimatedHours: 12 }
+      ]
+    },
+    { 
+      name: 'Database Management', 
+      code: 'CSE203', 
+      semester: 3, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'ER Modeling', estimatedHours: 12 },
+        { topic: 'SQL and Relational Algebra', estimatedHours: 18 },
+        { topic: 'Normalization', estimatedHours: 10 },
+        { topic: 'Transactions and Concurrency', estimatedHours: 14 },
+        { topic: 'NoSQL Databases', estimatedHours: 10 }
+      ]
+    },
+    { 
+      name: 'Operating Systems', 
+      code: 'CSE301', 
+      semester: 5, 
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'Process Management', estimatedHours: 14 },
+        { topic: 'Memory Management', estimatedHours: 14 },
+        { topic: 'File Systems', estimatedHours: 12 },
+        { topic: 'I/O Systems', estimatedHours: 10 },
+        { topic: 'Security and Protection', estimatedHours: 14 }
+      ]
+    },
+    { 
+      name: 'Computer Networks', 
+      code: 'CSE302', 
+      semester: 5, 
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: 'Network Layers', estimatedHours: 12 },
+        { topic: 'TCP/IP Protocol Suite', estimatedHours: 14 },
+        { topic: 'Routing Algorithms', estimatedHours: 10 },
+        { topic: 'Network Security', estimatedHours: 12 }
+      ]
+    },
   ];
 
   const createdCseSubjects = [];
@@ -166,6 +234,9 @@ async function main() {
         departmentId: cseDept.id,
         semester: sub.semester,
         weeklyClassesRequired: sub.weekly,
+        courseDurationWeeks: sub.duration,
+        totalHoursRequired: sub.totalHours,
+        conceptsCovered: sub.concepts,
       },
     });
     createdCseSubjects.push(subject);

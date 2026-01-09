@@ -6,6 +6,7 @@ import {
   getTimetable,
   approveTimetable,
   exportTimetable,
+  deleteTimetable,
 } from '../controllers/timetable.controller';
 import {
   authenticateToken,
@@ -32,5 +33,7 @@ router.get('/:id', getTimetable);
 router.post('/:id/approve', authorizeRoles('ADMIN'), approveTimetable);
 
 router.get('/:id/export/:format', exportTimetable);
+
+router.delete('/:id', authorizeRoles('ADMIN'), deleteTimetable);
 
 export default router;

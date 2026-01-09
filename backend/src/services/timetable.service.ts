@@ -76,6 +76,8 @@ export class TimetableGenerator {
 
   private workingDays = [0, 1, 2, 3, 4]; // Monday to Friday
   private constraintViolations: ConstraintViolation[] = [];
+  private readonly SEMESTER_DURATION_WEEKS = 16; // Standard semester duration
+  private readonly MIN_FREE_PERIODS_PER_WEEK = 2; // Minimum free periods per week for students
 
   getConstraintViolations(): ConstraintViolation[] {
     return this.constraintViolations;
@@ -101,8 +103,29 @@ export class TimetableGenerator {
       const shuffledBatches = this.shuffle([...batches]);
 
       for (const batch of shuffledBatches) {
+        // Track weekly hours for each subject
+        const subjectHoursScheduled = new Map<string, number>();
+
         for (const batchSubject of batch.subjects) {
           const subject = batchSubject.subject;
+          
+          // Validate course can be completed within semester duration
+          const totalHoursNeeded = subject.totalHoursRequired || (subject.weeklyClassesRequired * this.SEMESTER_DURATION_WEEKS);
+          const maxWeeklyHours = subject.weeklyClassesRequired;
+          
+          if (maxWeeklyHours * this.SEMESTER_DURATION_WEEKS < totalHoursNeeded) {
+            this.constraintViolations.push({
+              type: 'DURATION_INSUFFICIENT',
+              message: `${subject.name} cannot be completed within semester duration`,
+              details: {
+                subject: subject.name,
+                totalHoursNeeded,
+                maxPossibleHours: maxWeeklyHours * this.SEMESTER_DURATION_WEEKS,
+                semesterWeeks: this.SEMESTER_DURATION_WEEKS,
+              },
+            });
+          }
+
           const classesScheduled = this.scheduleSubject(
             batch,
             subject,
@@ -110,6 +133,8 @@ export class TimetableGenerator {
             schedule,
             entries
           );
+
+          subjectHoursScheduled.set(subject.id, classesScheduled);
 
           if (classesScheduled < subject.weeklyClassesRequired) {
             this.constraintViolations.push({
@@ -124,6 +149,23 @@ export class TimetableGenerator {
             });
             success = false;
           }
+        }
+
+        // Ensure minimum free periods for students
+        const batchWeeklyClasses = entries.filter(e => e.batchId === batch.id).length;
+        const maxPossibleSlots = this.timeSlots.length * this.workingDays.length;
+        const freePeriods = maxPossibleSlots - batchWeeklyClasses;
+        
+        if (freePeriods < this.MIN_FREE_PERIODS_PER_WEEK) {
+          this.constraintViolations.push({
+            type: 'INSUFFICIENT_FREE_PERIODS',
+            message: `Batch ${batch.name} has insufficient free periods`,
+            details: {
+              batch: batch.name,
+              freePeriods,
+              minimumRequired: this.MIN_FREE_PERIODS_PER_WEEK,
+            },
+          });
         }
       }
 
@@ -243,12 +285,26 @@ export class TimetableGenerator {
 
       if (!faculty) continue;
 
-      // Check faculty daily limit
+      // Check if faculty already has classes on this day
       const facultyDayClasses = entries.filter(
         (e) => e.facultyId === faculty.id && e.dayOfWeek === day
-      ).length;
+      );
 
-      if (facultyDayClasses >= faculty.maxClassesPerDay) continue;
+      if (facultyDayClasses.length > 0) {
+        // Faculty already scheduled on this day - enforce consecutive classes
+        const facultyTimes = facultyDayClasses.map(e => e.startTime).sort();
+        const lastTime = facultyTimes[facultyTimes.length - 1];
+        const firstTime = facultyTimes[0];
+        
+        // Only allow scheduling if this slot is consecutive to existing slots
+        const isConsecutive = this.isConsecutiveSlot(slot.startTime, firstTime, lastTime);
+        if (!isConsecutive) {
+          continue; // Skip this slot, faculty must have consecutive classes
+        }
+      }
+
+      // Check faculty daily limit
+      if (facultyDayClasses.length >= faculty.maxClassesPerDay) continue;
 
       const classroom = this.findAvailableClassroom(
         classrooms,
@@ -278,6 +334,16 @@ export class TimetableGenerator {
     }
 
     return false;
+  }
+
+  private isConsecutiveSlot(newTime: string, firstExisting: string, lastExisting: string): boolean {
+    // Check if new time is immediately before first or after last
+    const newSlotIndex = this.timeSlots.findIndex(s => s.startTime === newTime);
+    const firstSlotIndex = this.timeSlots.findIndex(s => s.startTime === firstExisting);
+    const lastSlotIndex = this.timeSlots.findIndex(s => s.startTime === lastExisting);
+
+    // Allow if it's immediately before the first slot or immediately after the last slot
+    return newSlotIndex === firstSlotIndex - 1 || newSlotIndex === lastSlotIndex + 1;
   }
 
   private selectFaculty(

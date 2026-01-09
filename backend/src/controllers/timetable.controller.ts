@@ -97,7 +97,16 @@ export const getTimetables = async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ timetables });
+    // Format timetables with metadata
+    const formattedTimetables = timetables.map(tt => ({
+      ...tt,
+      metadata: {
+        ...((tt.metadata as any) || {}),
+        totalEntries: tt._count.entries,
+      },
+    }));
+
+    res.json(formattedTimetables);
   } catch (error) {
     console.error('Get timetables error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -216,6 +225,33 @@ export const exportTimetable = async (req: AuthRequest, res: Response) => {
     }
   } catch (error) {
     console.error('Export timetable error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteTimetable = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const timetable = await prisma.timetable.findUnique({
+      where: { id },
+    });
+
+    if (!timetable) {
+      return res.status(404).json({ error: 'Timetable not found' });
+    }
+
+    if (timetable.status === 'LOCKED') {
+      return res.status(400).json({ error: 'Cannot delete a locked timetable' });
+    }
+
+    await prisma.timetable.delete({
+      where: { id },
+    });
+
+    res.json({ message: 'Timetable deleted successfully' });
+  } catch (error) {
+    console.error('Delete timetable error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

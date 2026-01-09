@@ -115,7 +115,10 @@ model Subject {
   departmentId         String
   semester             Int
   weeklyClassesRequired Int
-  fixedSlot            Json? // { dayOfWeek: number, startTime: string, endTime: string }
+  courseDurationWeeks  Int      @default(16) // Duration in weeks (typical semester length)
+  totalHoursRequired   Int      @default(48) // Total teaching hours needed for the course
+  conceptsCovered      Json?    // Array of concepts/topics to be covered with estimated hours
+  fixedSlot            Json?    // { dayOfWeek: number, startTime: string, endTime: string }
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

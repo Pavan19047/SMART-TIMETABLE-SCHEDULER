@@ -18,8 +18,22 @@ export const createSubject = async (req: AuthRequest, res: Response) => {
       departmentId,
       semester,
       weeklyClassesRequired,
+      courseDurationWeeks,
+      totalHoursRequired,
+      conceptsCovered,
       fixedSlot,
     } = req.body;
+
+    // Auto-calculate total hours if not provided
+    const calculatedTotalHours = totalHoursRequired || (weeklyClassesRequired * (courseDurationWeeks || 16));
+
+    // Generate basic concepts if not provided
+    const defaultConcepts = conceptsCovered || [
+      { topic: 'Introduction and Fundamentals', estimatedHours: Math.ceil(calculatedTotalHours * 0.2) },
+      { topic: 'Core Concepts', estimatedHours: Math.ceil(calculatedTotalHours * 0.4) },
+      { topic: 'Advanced Topics', estimatedHours: Math.ceil(calculatedTotalHours * 0.25) },
+      { topic: 'Practical Applications & Review', estimatedHours: Math.ceil(calculatedTotalHours * 0.15) },
+    ];
 
     const subject = await prisma.subject.create({
       data: {
@@ -28,6 +42,9 @@ export const createSubject = async (req: AuthRequest, res: Response) => {
         departmentId,
         semester,
         weeklyClassesRequired,
+        courseDurationWeeks: courseDurationWeeks || 16,
+        totalHoursRequired: calculatedTotalHours,
+        conceptsCovered: defaultConcepts,
         fixedSlot: fixedSlot || null,
       },
       include: {
