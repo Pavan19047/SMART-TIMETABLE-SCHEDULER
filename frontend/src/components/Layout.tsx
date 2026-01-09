@@ -72,6 +72,12 @@ const Layout: React.FC = () => {
                     Generate Timetable
                   </Link>
                 )}
+                <Link
+                  to="/timetables"
+                  className="text-white hover:bg-indigo-500 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  All Timetables
+                </Link>
               </div>
             </div>
             <div className="flex items-center">

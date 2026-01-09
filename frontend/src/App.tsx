@@ -10,6 +10,7 @@ import Subjects from './pages/Subjects';
 import Batches from './pages/Batches';
 import GenerateTimetable from './pages/GenerateTimetable';
 import ViewTimetable from './pages/ViewTimetable';
+import AllTimetables from './pages/AllTimetables';
 import Layout from './components/Layout';
 
 function App() {
@@ -75,6 +76,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="timetables" element={<AllTimetables />} />
           <Route path="timetable/:id" element={<ViewTimetable />} />
         </Route>
       </Routes>
