@@ -4,6 +4,7 @@ import api from '../lib/api';
 const Faculties: React.FC = () => {
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', departmentId: '', maxClassesPerDay: '4', weeklyLoadLimit: '20' });
@@ -23,6 +24,10 @@ const Faculties: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const filteredFaculties = selectedDepartment 
+    ? faculties.filter(fac => fac.departmentId === selectedDepartment)
+    : faculties;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +60,21 @@ const Faculties: React.FC = () => {
         <button onClick={() => setShowForm(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-md">Add Faculty</button>
       </div>
 
+      {/* Branch Filter */}
+      <div className="mb-6 bg-white shadow rounded-lg p-4">
+        <label className="block text-sm font-medium mb-2">Filter by Branch/Department</label>
+        <select 
+          className="block w-full rounded-md border px-3 py-2"
+          value={selectedDepartment}
+          onChange={(e) => setSelectedDepartment(e.target.value)}
+        >
+          <option value="">All Branches</option>
+          {departments.map(d => (
+            <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+          ))}
+        </select>
+      </div>
+
       {showForm && (
         <div className="mb-6 bg-white shadow rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Add Faculty</h2>
@@ -73,9 +93,13 @@ const Faculties: React.FC = () => {
       )}
 
       <div className="bg-white shadow rounded-md">
-        {faculties.length === 0 ? <div className="p-6 text-center text-gray-500">No faculties found</div> : (
+        {filteredFaculties.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">
+            {selectedDepartment ? 'No faculties found for this branch' : 'No faculties found'}
+          </div>
+        ) : (
           <ul className="divide-y">
-            {faculties.map((fac) => (
+            {filteredFaculties.map((fac) => (
               <li key={fac.id} className="px-6 py-4 flex justify-between">
                 <div>
                   <h3 className="font-medium">{fac.name}</h3>

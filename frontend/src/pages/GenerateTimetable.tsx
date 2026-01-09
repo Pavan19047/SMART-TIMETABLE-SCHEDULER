@@ -3,14 +3,57 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 
 const GenerateTimetable: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', semester: '1' });
+  const [formData, setFormData] = useState({ name: '', departmentId: '', semester: '1' });
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [timetables, setTimetables] = useState<any[]>([]);
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    fetchDepartments();
+  }, []);
+
+  React.useEffect(() => {
+    if (formData.departmentId && formData.semester) {
+      fetchBatches();
+    } else {
+      setBatches([]);
+    }
+  }, [formData.departmentId, formData.semester]);
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/departments');
+      setDepartments(response.data.departments);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
+
+  const fetchBatches = async () => {
+    try {
+      const response = await api.get('/batches');
+      const filteredBatches = response.data.batches.filter(
+        (batch: any) => 
+          batch.departmentId === formData.departmentId && 
+          batch.semester === parseInt(formData.semester)
+      );
+      setBatches(filteredBatches);
+    } catch (error) {
+      console.error('Error fetching batches:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (batches.length === 0) {
+      setError('No batches found for the selected branch and semester. Please add batches first.');
+      return;
+    }
+
     setError('');
     setLoading(true);
     setTimetables([]);
@@ -19,10 +62,11 @@ const GenerateTimetable: React.FC = () => {
       const response = await api.post('/timetables/generate', {
         name: formData.name,
         semester: parseInt(formData.semester),
+        departmentId: formData.departmentId,
       });
 
       setTimetables(response.data.timetables);
-      setFormData({ name: '', semester: '1' });
+      setFormData({ name: '', departmentId: '', semester: '1' });
     } catch (error: any) {
       setError(error.response?.data?.error || 'Failed to generate timetables');
       if (error.response?.data?.details) {
@@ -52,6 +96,21 @@ const GenerateTimetable: React.FC = () => {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700">Branch/Department</label>
+            <select
+              required
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2 border"
+              value={formData.departmentId}
+              onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+            >
+              <option value="">Select Branch</option>
+              {departments.map(dept => (
+                <option key={dept.id} value={dept.id}>{dept.name} ({dept.code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700">Semester</label>
             <select
               required
@@ -70,6 +129,21 @@ const GenerateTimetable: React.FC = () => {
             </select>
           </div>
 
+          {formData.departmentId && formData.semester && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+              <h4 className="text-sm font-semibold text-blue-900 mb-2">📚 Available Batches</h4>
+              {batches.length > 0 ? (
+                <ul className="text-sm text-blue-800 space-y-1">
+                  {batches.map(batch => (
+                    <li key={batch.id}>• {batch.name} (Size: {batch.batchSize})</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-orange-700">⚠️ No batches found for this branch and semester</p>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="text-sm text-red-700">{error}</div>
@@ -78,7 +152,7 @@ const GenerateTimetable: React.FC = () => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !formData.departmentId}
             className="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 disabled:bg-gray-400"
           >
             {loading ? 'Generating...' : 'Generate Timetables'}

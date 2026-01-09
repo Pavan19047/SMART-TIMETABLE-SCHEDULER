@@ -26,10 +26,16 @@ const Classrooms: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        roomId: formData.roomId,
+        capacity: parseInt(formData.capacity),
+        type: formData.type,
+      };
+      
       if (editingId) {
-        await api.put(`/classrooms/${editingId}`, formData);
+        await api.put(`/classrooms/${editingId}`, payload);
       } else {
-        await api.post('/classrooms', formData);
+        await api.post('/classrooms', payload);
       }
       setFormData({ roomId: '', capacity: '', type: 'CLASSROOM' });
       setShowForm(false);

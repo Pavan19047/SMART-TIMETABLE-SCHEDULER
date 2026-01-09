@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 const Subjects: React.FC = () => {
+  const { user } = useAuth();
   const [subjects, setSubjects] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ 
     name: '', 
     code: '', 
-    departmentId: '', 
-    semester: '1', 
     weeklyClassesRequired: '3',
     courseDurationWeeks: '16',
     totalHoursRequired: '48'
@@ -32,17 +34,28 @@ const Subjects: React.FC = () => {
     }
   };
 
+  const handleDepartmentChange = (deptId: string) => {
+    setSelectedDepartment(deptId);
+    setSelectedSemester(null); // Reset semester when department changes
+  };
+
+  const handleSemesterClick = (semester: number) => {
+    setSelectedSemester(semester);
+    setShowForm(false); // Hide form when switching semesters
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await api.post('/subjects', { 
         ...formData, 
-        semester: parseInt(formData.semester), 
+        departmentId: selectedDepartment,
+        semester: selectedSemester,
         weeklyClassesRequired: parseInt(formData.weeklyClassesRequired),
         courseDurationWeeks: parseInt(formData.courseDurationWeeks),
         totalHoursRequired: parseInt(formData.totalHoursRequired)
       });
-      setFormData({ name: '', code: '', departmentId: '', semester: '1', weeklyClassesRequired: '3', courseDurationWeeks: '16', totalHoursRequired: '48' });
+      setFormData({ name: '', code: '', weeklyClassesRequired: '3', courseDurationWeeks: '16', totalHoursRequired: '48' });
       setShowForm(false);
       fetchData();
     } catch (error: any) {
@@ -60,108 +73,238 @@ const Subjects: React.FC = () => {
     }
   };
 
+  // Always show all 8 semesters when department is selected
+  const allSemesters = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  // Get count of subjects per semester for badge display
+  const getSubjectCount = (semester: number) => {
+    return subjects.filter(s => s.departmentId === selectedDepartment && s.semester === semester).length;
+  };
+
+  const filteredSubjects = subjects.filter(sub => {
+    if (!selectedDepartment) return false;
+    if (selectedSemester === null) return false;
+    return sub.departmentId === selectedDepartment && sub.semester === selectedSemester;
+  });
+
+
+
   if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
 
   return (
     <div className="px-4 sm:px-0">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6">
         <h1 className="text-3xl font-bold">Subjects</h1>
-        <button onClick={() => setShowForm(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-md">Add Subject</button>
+        <p className="text-gray-600 mt-2">View subjects by selecting a branch and semester</p>
       </div>
 
-      {showForm && (
+      {/* Step 1: Branch Selection */}
+      <div className="mb-6 bg-white shadow rounded-lg p-6">
+        <h2 className="text-lg font-semibold mb-4">Step 1: Select Branch</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {departments.map(dept => (
+            <button
+              key={dept.id}
+              onClick={() => handleDepartmentChange(dept.id)}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                selectedDepartment === dept.id
+                  ? 'border-indigo-600 bg-indigo-50 shadow-md'
+                  : 'border-gray-200 hover:border-indigo-300 hover:shadow'
+              }`}
+            >
+              <h3 className="font-semibold text-lg">{dept.code}</h3>
+              <p className="text-sm text-gray-600">{dept.name}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Step 2: Semester Selection - Always show all 8 semesters */}
+      {selectedDepartment && (
         <div className="mb-6 bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Add Subject</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium">Name</label>
-                <input type="text" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Code</label>
-                <input type="text" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Department</label>
-              <select required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.departmentId} onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}>
-                <option value="">Select Department</option>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium">Semester</label>
-                <input type="number" min="1" max="8" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.semester} onChange={(e) => setFormData({ ...formData, semester: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Weekly Classes</label>
-                <input type="number" min="1" max="10" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.weeklyClassesRequired} onChange={(e) => setFormData({ ...formData, weeklyClassesRequired: e.target.value })} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium">Duration (Weeks)</label>
-                <input type="number" min="1" max="20" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.courseDurationWeeks} onChange={(e) => setFormData({ ...formData, courseDurationWeeks: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Total Hours Required</label>
-              <input type="number" min="1" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.totalHoursRequired} onChange={(e) => setFormData({ ...formData, totalHoursRequired: e.target.value })} />
-              <p className="text-xs text-gray-500 mt-1">
-                Suggested: {parseInt(formData.weeklyClassesRequired) * parseInt(formData.courseDurationWeeks)} hours 
-                ({formData.weeklyClassesRequired} classes/week × {formData.courseDurationWeeks} weeks)
-              </p>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-md">
-              <h4 className="text-sm font-semibold text-blue-900 mb-2">📚 Auto-Generated Concepts</h4>
-              <p className="text-xs text-blue-800">
-                The system will automatically break down the course into basic concepts covering:
-              </p>
-              <ul className="text-xs text-blue-700 mt-2 space-y-1 ml-4">
-                <li>• Introduction & Fundamentals (20%)</li>
-                <li>• Core Concepts (40%)</li>
-                <li>• Advanced Topics (25%)</li>
-                <li>• Practical Applications & Review (15%)</li>
-              </ul>
-            </div>
-            <div className="flex space-x-3">
-              <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Create Subject</button>
-              <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</button>
-            </div>
-          </form>
+          <h2 className="text-lg font-semibold mb-4">Step 2: Select Semester</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+            {allSemesters.map(sem => {
+              const subjectCount = getSubjectCount(sem);
+              return (
+                <button
+                  key={sem}
+                  onClick={() => handleSemesterClick(sem)}
+                  className={`p-4 rounded-lg border-2 transition-all text-center relative ${
+                    selectedSemester === sem
+                      ? 'border-indigo-600 bg-indigo-50 shadow-md'
+                      : 'border-gray-200 hover:border-indigo-300 hover:shadow'
+                  }`}
+                >
+                  <div className="text-2xl font-bold text-indigo-600">{sem}</div>
+                  <div className="text-xs text-gray-600">Semester</div>
+                  {subjectCount > 0 && (
+                    <span className="absolute top-2 right-2 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {subjectCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      <div className="bg-white shadow rounded-md">
-        {subjects.length === 0 ? <div className="p-6 text-center text-gray-500">No subjects found</div> : (
-          <ul className="divide-y">
-            {subjects.map((sub) => (
-              <li key={sub.id} className="px-6 py-4 flex justify-between items-start">
-                <div className="flex-1">
-                  <h3 className="font-medium text-lg">{sub.name} ({sub.code})</h3>
-                  <p className="text-sm text-gray-500">{sub.department.name} • Semester {sub.semester}</p>
-                  <div className="mt-2 text-sm text-gray-600">
-                    <span className="inline-block mr-4">📅 {sub.weeklyClassesRequired} classes/week</span>
-                    <span className="inline-block mr-4">⏱️ {sub.courseDurationWeeks || 16} weeks</span>
-                    <span className="inline-block">🎯 {sub.totalHoursRequired || (sub.weeklyClassesRequired * 16)} total hours</span>
+      {/* Step 3: Display Subjects */}
+      {selectedSemester !== null && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-semibold">
+              Subjects - Semester {selectedSemester}
+            </h2>
+            {user?.role === 'ADMIN' && (
+              <button 
+                onClick={() => setShowForm(!showForm)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+              >
+                {showForm ? 'Cancel' : '+ Add Subject'}
+              </button>
+            )}
+          </div>
+
+          {/* Add Subject Form */}
+          {showForm && user?.role === 'ADMIN' && (
+            <div className="mb-6 border border-indigo-200 rounded-lg p-6 bg-indigo-50">
+              <h3 className="text-md font-semibold mb-4">Add New Subject</h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Subject Name</label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.name} 
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })} 
+                      placeholder="e.g., Data Structures"
+                    />
                   </div>
-                  {sub.conceptsCovered && (
-                    <div className="mt-2 text-xs text-gray-500">
-                      <span className="font-semibold">Concepts: </span>
-                      {sub.conceptsCovered.map((c: any, i: number) => (
-                        <span key={i} className="inline-block mr-2">
-                          {c.topic} ({c.estimatedHours}h)
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Subject Code</label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.code} 
+                      onChange={(e) => setFormData({ ...formData, code: e.target.value })} 
+                      placeholder="e.g., CSE301"
+                    />
+                  </div>
                 </div>
-                <button onClick={() => handleDelete(sub.id)} className="text-red-600 hover:text-red-800 ml-4">Delete</button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Weekly Classes</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="10" 
+                      required 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.weeklyClassesRequired} 
+                      onChange={(e) => setFormData({ ...formData, weeklyClassesRequired: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Duration (Weeks)</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="20" 
+                      required 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.courseDurationWeeks} 
+                      onChange={(e) => setFormData({ ...formData, courseDurationWeeks: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Total Hours</label>
+                    <input 
+                      type="number" 
+                      min="1" 
+                      required 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.totalHoursRequired} 
+                      onChange={(e) => setFormData({ ...formData, totalHoursRequired: e.target.value })} 
+                    />
+                  </div>
+                </div>
+                <div className="flex space-x-3">
+                  <button 
+                    type="submit" 
+                    className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700"
+                  >
+                    Add Subject
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setShowForm(false)} 
+                    className="bg-gray-300 px-6 py-2 rounded-md hover:bg-gray-400"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {filteredSubjects.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              {user?.role === 'ADMIN' 
+                ? 'No subjects found for this semester. Click "Add Subject" to add one.'
+                : 'No subjects found for this semester. Please contact admin to add subjects.'}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredSubjects.map((sub) => (
+                <div key={sub.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg text-indigo-900">{sub.name}</h3>
+                      <p className="text-sm text-gray-600 mt-1">Code: {sub.code}</p>
+                      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800">
+                          📅 {sub.weeklyClassesRequired} classes/week
+                        </span>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-green-100 text-green-800">
+                          ⏱️ {sub.courseDurationWeeks || 16} weeks
+                        </span>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-800">
+                          🎯 {sub.totalHoursRequired || (sub.weeklyClassesRequired * 16)} total hours
+                        </span>
+                      </div>
+                      {sub.conceptsCovered && sub.conceptsCovered.length > 0 && (
+                        <div className="mt-3 p-3 bg-gray-50 rounded-md">
+                          <p className="text-xs font-semibold text-gray-700 mb-2">Course Topics:</p>
+                          <div className="flex flex-wrap gap-2">
+                            {sub.conceptsCovered.map((c: any, i: number) => (
+                              <span key={i} className="text-xs bg-white px-2 py-1 rounded border border-gray-200">
+                                {c.topic} <span className="text-gray-500">({c.estimatedHours}h)</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {user?.role === 'ADMIN' && (
+                      <button 
+                        onClick={() => handleDelete(sub.id)} 
+                        className="text-red-600 hover:text-red-800 px-3 py-1 rounded border border-red-300 hover:bg-red-50 ml-4"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

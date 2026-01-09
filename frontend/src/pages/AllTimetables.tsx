@@ -35,7 +35,7 @@ export default function AllTimetables() {
     try {
       setLoading(true);
       const response = await api.get('/timetables');
-      setTimetables(response.data);
+      setTimetables(response.data.timetables || []);
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to fetch timetables');
