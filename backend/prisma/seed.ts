@@ -152,6 +152,7 @@ async function main() {
       name: 'Data Structures', 
       code: 'CSE201', 
       semester: 3, 
+      type: 'THEORY',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -167,6 +168,7 @@ async function main() {
       name: 'Algorithms', 
       code: 'CSE202', 
       semester: 3, 
+      type: 'THEORY',
       weekly: 3,
       duration: 16,
       totalHours: 48,
@@ -181,6 +183,7 @@ async function main() {
       name: 'Database Management', 
       code: 'CSE203', 
       semester: 3, 
+      type: 'THEORY_CUM_PRACTICAL',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -193,9 +196,56 @@ async function main() {
       ]
     },
     { 
+      name: 'Software Engineering', 
+      code: 'CSE204', 
+      semester: 4, 
+      type: 'THEORY',
+      weekly: 4,
+      duration: 16,
+      totalHours: 64,
+      concepts: [
+        { topic: 'SDLC Models', estimatedHours: 14 },
+        { topic: 'Requirements Engineering', estimatedHours: 12 },
+        { topic: 'Design Patterns', estimatedHours: 16 },
+        { topic: 'Testing and Quality Assurance', estimatedHours: 14 },
+        { topic: 'Agile Methodologies', estimatedHours: 8 }
+      ]
+    },
+    { 
+      name: 'Computer Architecture', 
+      code: 'CSE205', 
+      semester: 4, 
+      type: 'THEORY',
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: 'CPU Organization', estimatedHours: 12 },
+        { topic: 'Memory Hierarchy', estimatedHours: 12 },
+        { topic: 'Pipelining', estimatedHours: 12 },
+        { topic: 'I/O Organization', estimatedHours: 12 }
+      ]
+    },
+    { 
+      name: 'Web Technologies', 
+      code: 'CSE206', 
+      semester: 4, 
+      type: 'PRACTICAL',
+      weekly: 3,
+      duration: 16,
+      totalHours: 48,
+      concepts: [
+        { topic: 'HTML and CSS', estimatedHours: 10 },
+        { topic: 'JavaScript and DOM', estimatedHours: 14 },
+        { topic: 'Backend Development', estimatedHours: 12 },
+        { topic: 'Web Security', estimatedHours: 12 }
+      ]
+    },
+    { 
       name: 'Operating Systems', 
       code: 'CSE301', 
       semester: 5, 
+      type: 'THEORY',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -211,6 +261,7 @@ async function main() {
       name: 'Computer Networks', 
       code: 'CSE302', 
       semester: 5, 
+      type: 'THEORY_CUM_PRACTICAL',
       weekly: 3,
       duration: 16,
       totalHours: 48,
@@ -232,15 +283,19 @@ async function main() {
         totalHoursRequired: sub.totalHours,
         courseDurationWeeks: sub.duration,
         weeklyClassesRequired: sub.weekly,
+        type: (sub as any).type || 'THEORY',
+        hoursPerSession: ((sub as any).type === 'PRACTICAL' || (sub as any).type === 'THEORY_CUM_PRACTICAL') ? 2 : 1,
       },
       create: {
         name: sub.name,
         code: sub.code,
         departmentId: cseDept.id,
         semester: sub.semester,
+        type: (sub as any).type || 'THEORY',
         weeklyClassesRequired: sub.weekly,
         courseDurationWeeks: sub.duration,
         totalHoursRequired: sub.totalHours,
+        hoursPerSession: ((sub as any).type === 'PRACTICAL' || (sub as any).type === 'THEORY_CUM_PRACTICAL') ? 2 : 1,
         conceptsCovered: sub.concepts,
       },
     });
@@ -255,6 +310,7 @@ async function main() {
       name: 'Digital Electronics', 
       code: 'ECE201', 
       semester: 1, 
+      type: 'THEORY_CUM_PRACTICAL',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -269,6 +325,7 @@ async function main() {
       name: 'Signals and Systems', 
       code: 'ECE202', 
       semester: 1, 
+      type: 'THEORY',
       weekly: 3,
       duration: 16,
       totalHours: 48,
@@ -283,6 +340,7 @@ async function main() {
       name: 'Electronic Circuits', 
       code: 'ECE203', 
       semester: 1, 
+      type: 'PRACTICAL',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -297,6 +355,7 @@ async function main() {
       name: 'Communication Systems', 
       code: 'ECE301', 
       semester: 3, 
+      type: 'THEORY',
       weekly: 4,
       duration: 16,
       totalHours: 64,
@@ -311,6 +370,7 @@ async function main() {
       name: 'Microprocessors', 
       code: 'ECE302', 
       semester: 3, 
+      type: 'PRACTICAL',
       weekly: 3,
       duration: 16,
       totalHours: 48,
@@ -332,15 +392,19 @@ async function main() {
         totalHoursRequired: sub.totalHours,
         courseDurationWeeks: sub.duration,
         weeklyClassesRequired: sub.weekly,
+        type: (sub as any).type || 'THEORY',
+        hoursPerSession: ((sub as any).type === 'PRACTICAL' || (sub as any).type === 'THEORY_CUM_PRACTICAL') ? 2 : 1,
       },
       create: {
         name: sub.name,
         code: sub.code,
         departmentId: eceDept.id,
         semester: sub.semester,
+        type: (sub as any).type || 'THEORY',
         weeklyClassesRequired: sub.weekly,
         courseDurationWeeks: sub.duration,
         totalHoursRequired: sub.totalHours,
+        hoursPerSession: ((sub as any).type === 'PRACTICAL' || (sub as any).type === 'THEORY_CUM_PRACTICAL') ? 2 : 1,
         conceptsCovered: sub.concepts,
       },
     });
@@ -400,10 +464,22 @@ async function main() {
     update: {},
     create: {
       id: 'batch-cse-3a',
-      name: 'CSE 3rd Year - Section A',
+      name: 'CSE 3rd Semester - Section A',
       departmentId: cseDept.id,
       semester: 3,
       batchSize: 60,
+    },
+  });
+
+  const batch4A = await prisma.batch.upsert({
+    where: { id: 'batch-cse-4a' },
+    update: {},
+    create: {
+      id: 'batch-cse-4a',
+      name: 'CSE 4th Semester - Section A',
+      departmentId: cseDept.id,
+      semester: 4,
+      batchSize: 58,
     },
   });
 
@@ -448,6 +524,7 @@ async function main() {
 
   // Assign subjects to batches
   const cseSem3Subjects = createdCseSubjects.filter((s) => s.semester === 3);
+  const cseSem4Subjects = createdCseSubjects.filter((s) => s.semester === 4);
   const cseSem5Subjects = createdCseSubjects.filter((s) => s.semester === 5);
 
   for (const subject of cseSem3Subjects) {
@@ -461,6 +538,22 @@ async function main() {
       update: {},
       create: {
         batchId: batch3A.id,
+        subjectId: subject.id,
+      },
+    });
+  }
+
+  for (const subject of cseSem4Subjects) {
+    await prisma.batchSubject.upsert({
+      where: {
+        batchId_subjectId: {
+          batchId: batch4A.id,
+          subjectId: subject.id,
+        },
+      },
+      update: {},
+      create: {
+        batchId: batch4A.id,
         subjectId: subject.id,
       },
     });

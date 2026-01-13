@@ -13,6 +13,7 @@ const Subjects: React.FC = () => {
   const [formData, setFormData] = useState({ 
     name: '', 
     code: '', 
+    type: 'THEORY',
     weeklyClassesRequired: '3',
     courseDurationWeeks: '16',
     totalHoursRequired: '48'
@@ -55,7 +56,7 @@ const Subjects: React.FC = () => {
         courseDurationWeeks: parseInt(formData.courseDurationWeeks),
         totalHoursRequired: parseInt(formData.totalHoursRequired)
       });
-      setFormData({ name: '', code: '', weeklyClassesRequired: '3', courseDurationWeeks: '16', totalHoursRequired: '48' });
+      setFormData({ name: '', code: '', type: 'THEORY', weeklyClassesRequired: '3', courseDurationWeeks: '16', totalHoursRequired: '48' });
       setShowForm(false);
       fetchData();
     } catch (error: any) {
@@ -196,7 +197,19 @@ const Subjects: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Subject Type</label>
+                    <select 
+                      className="w-full rounded-md border border-gray-300 px-3 py-2" 
+                      value={formData.type} 
+                      onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    >
+                      <option value="THEORY">Theory</option>
+                      <option value="PRACTICAL">Practical</option>
+                      <option value="THEORY_CUM_PRACTICAL">Theory cum Practical</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Weekly Classes</label>
                     <input 
@@ -267,6 +280,15 @@ const Subjects: React.FC = () => {
                       <h3 className="font-semibold text-lg text-indigo-900">{sub.name}</h3>
                       <p className="text-sm text-gray-600 mt-1">Code: {sub.code}</p>
                       <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full ${
+                          sub.type === 'PRACTICAL' ? 'bg-orange-100 text-orange-800' :
+                          sub.type === 'THEORY_CUM_PRACTICAL' ? 'bg-teal-100 text-teal-800' :
+                          'bg-indigo-100 text-indigo-800'
+                        }`}>
+                          {sub.type === 'PRACTICAL' ? '🔬 Practical' :
+                           sub.type === 'THEORY_CUM_PRACTICAL' ? '📚🔬 Theory + Practical' :
+                           '📚 Theory'}
+                        </span>
                         <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800">
                           📅 {sub.weeklyClassesRequired} classes/week
                         </span>

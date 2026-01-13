@@ -7,6 +7,180 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(VIEWER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Department {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  code      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  batches   Batch[]
+  faculties Faculty[]
+  subjects  Subject[]
+
+  @@map("departments")
+}
+
+model Classroom {
+  id           String                  @id @default(uuid())
+  roomId       String                  @unique
+  capacity     Int
+  type         ClassroomType
+  departmentId String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  availability ClassroomAvailability[]
+  classes      TimetableEntry[]
+
+  @@map("classrooms")
+}
+
+model ClassroomAvailability {
+  id          String    @id @default(uuid())
+  classroomId String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@map("classroom_availability")
+}
+
+model Faculty {
+  id                    String                @id @default(uuid())
+  name                  String
+  email                 String                @unique
+  departmentId          String
+  maxClassesPerDay      Int                   @default(4)
+  weeklyLoadLimit       Int                   @default(20)
+  averageLeavesPerMonth Int                   @default(2)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  department            Department            @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  availability          FacultyAvailability[]
+  subjects              FacultySubject[]
+  classes               TimetableEntry[]
+
+  @@map("faculties")
+}
+
+model FacultyAvailability {
+  id        String  @id @default(uuid())
+  facultyId String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@map("faculty_availability")
+}
+
+model Subject {
+  id                    String           @id @default(uuid())
+  name                  String
+  code                  String           @unique
+  departmentId          String
+  semester              Int
+  weeklyClassesRequired Int
+  fixedSlot             Json?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  conceptsCovered       Json?
+  courseDurationWeeks   Int              @default(16)
+  totalHoursRequired    Int              @default(48)
+  hoursPerSession       Int              @default(1)
+  type                  SubjectType      @default(THEORY)
+  batches               BatchSubject[]
+  faculties             FacultySubject[]
+  department            Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  classes               TimetableEntry[]
+
+  @@map("subjects")
+}
+
+model FacultySubject {
+  id        String  @id @default(uuid())
+  facultyId String
+  subjectId String
+  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([facultyId, subjectId])
+  @@map("faculty_subjects")
+}
+
+model Batch {
+  id           String           @id @default(uuid())
+  name         String
+  departmentId String
+  semester     Int
+  batchSize    Int
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  subjects     BatchSubject[]
+  department   Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  classes      TimetableEntry[]
+
+  @@map("batches")
+}
+
+model BatchSubject {
+  id        String  @id @default(uuid())
+  batchId   String
+  subjectId String
+  batch     Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, subjectId])
+  @@map("batch_subjects")
+}
+
+model Timetable {
+  id         String           @id @default(uuid())
+  name       String
+  semester   Int
+  status     TimetableStatus  @default(DRAFT)
+  score      Float?
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+  approvedAt DateTime?
+  approvedBy String?
+  entries    TimetableEntry[]
+
+  @@map("timetables")
+}
+
+model TimetableEntry {
+  id          String    @id @default(uuid())
+  timetableId String
+  batchId     String
+  subjectId   String
+  facultyId   String
+  classroomId String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  batch       Batch     @relation(fields: [batchId], references: [id])
+  classroom   Classroom @relation(fields: [classroomId], references: [id])
+  faculty     Faculty   @relation(fields: [facultyId], references: [id])
+  subject     Subject   @relation(fields: [subjectId], references: [id])
+  timetable   Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+
+  @@map("timetable_entries")
+}
+
 enum UserRole {
   ADMIN
   SCHEDULER
@@ -24,185 +198,9 @@ enum TimetableStatus {
   LOCKED
 }
 
-model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      UserRole @default(VIEWER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("users")
-}
-
-model Department {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  code      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  faculties Faculty[]
-  subjects  Subject[]
-  batches   Batch[]
-
-  @@map("departments")
-}
-
-model Classroom {
-  id           String        @id @default(uuid())
-  roomId       String        @unique
-  capacity     Int
-  type         ClassroomType
-  departmentId String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  availability ClassroomAvailability[]
-  classes      TimetableEntry[]
-
-  @@map("classrooms")
-}
-
-model ClassroomAvailability {
-  id          String @id @default(uuid())
-  classroomId String
-  dayOfWeek   Int // 0=Monday, 6=Sunday
-  startTime   String // HH:MM format
-  endTime     String // HH:MM format
-
-  classroom Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
-
-  @@map("classroom_availability")
-}
-
-model Faculty {
-  id                   String   @id @default(uuid())
-  name                 String
-  email                String   @unique
-  departmentId         String
-  maxClassesPerDay     Int      @default(4)
-  weeklyLoadLimit      Int      @default(20)
-  averageLeavesPerMonth Int     @default(2)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  department        Department           @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  subjects          FacultySubject[]
-  classes           TimetableEntry[]
-  availability      FacultyAvailability[]
-
-  @@map("faculties")
-}
-
-model FacultyAvailability {
-  id        String @id @default(uuid())
-  facultyId String
-  dayOfWeek Int // 0=Monday, 6=Sunday
-  startTime String // HH:MM format
-  endTime   String // HH:MM format
-
-  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
-
-  @@map("faculty_availability")
-}
-
-model Subject {
-  id                   String   @id @default(uuid())
-  name                 String
-  code                 String   @unique
-  departmentId         String
-  semester             Int
-  weeklyClassesRequired Int
-  courseDurationWeeks  Int      @default(16) // Duration in weeks (typical semester length)
-  totalHoursRequired   Int      @default(48) // Total teaching hours needed for the course
-  conceptsCovered      Json?    // Array of concepts/topics to be covered with estimated hours
-  fixedSlot            Json?    // { dayOfWeek: number, startTime: string, endTime: string }
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  department Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  faculties  FacultySubject[]
-  batches    BatchSubject[]
-  classes    TimetableEntry[]
-
-  @@map("subjects")
-}
-
-model FacultySubject {
-  id        String @id @default(uuid())
-  facultyId String
-  subjectId String
-
-  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
-  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-
-  @@unique([facultyId, subjectId])
-  @@map("faculty_subjects")
-}
-
-model Batch {
-  id           String   @id @default(uuid())
-  name         String
-  departmentId String
-  semester     Int
-  batchSize    Int
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  department Department     @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-  subjects   BatchSubject[]
-  classes    TimetableEntry[]
-
-  @@map("batches")
-}
-
-model BatchSubject {
-  id        String @id @default(uuid())
-  batchId   String
-  subjectId String
-
-  batch   Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-
-  @@unique([batchId, subjectId])
-  @@map("batch_subjects")
-}
-
-model Timetable {
-  id          String          @id @default(uuid())
-  name        String
-  semester    Int
-  status      TimetableStatus @default(DRAFT)
-  score       Float?
-  metadata    Json? // Stores optimization info, constraints met, etc.
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  approvedAt  DateTime?
-  approvedBy  String?
-
-  entries TimetableEntry[]
-
-  @@map("timetables")
-}
-
-model TimetableEntry {
-  id           String @id @default(uuid())
-  timetableId  String
-  batchId      String
-  subjectId    String
-  facultyId    String
-  classroomId  String
-  dayOfWeek    Int // 0=Monday, 6=Sunday
-  startTime    String // HH:MM format
-  endTime      String // HH:MM format
-
-  timetable Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
-  batch     Batch     @relation(fields: [batchId], references: [id])
-  subject   Subject   @relation(fields: [subjectId], references: [id])
-  faculty   Faculty   @relation(fields: [facultyId], references: [id])
-  classroom Classroom @relation(fields: [classroomId], references: [id])
-
-  @@map("timetable_entries")
+enum SubjectType {
+  THEORY
+  PRACTICAL
+  THEORY_CUM_PRACTICAL
+  LAB
 }

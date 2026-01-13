@@ -90,11 +90,47 @@ const ViewTimetable: React.FC = () => {
 
   // Group entries by day and time for grid display
   const getClassForSlot = (dayIndex: number, timeSlot: any) => {
-    return timetable.entries.find((entry: any) => 
-      entry.dayOfWeek === dayIndex && 
-      entry.startTime === timeSlot.start
-    );
+    return timetable.entries.find((entry: any) => {
+      if (entry.dayOfWeek !== dayIndex) return false;
+      
+      // Check if this slot falls within the entry's time range
+      const entryStart = entry.startTime;
+      const entryEnd = entry.endTime;
+      const slotStart = timeSlot.start;
+      
+      // Convert times to minutes for comparison
+      const toMinutes = (time: string) => {
+        const [hours, mins] = time.split(':').map(Number);
+        return hours * 60 + mins;
+      };
+      
+      const entryStartMin = toMinutes(entryStart);
+      const entryEndMin = toMinutes(entryEnd);
+      const slotStartMin = toMinutes(slotStart);
+      
+      // Check if slot start time falls within entry's time range
+      return slotStartMin >= entryStartMin && slotStartMin < entryEndMin;
+    });
   };
+
+  // Check if a class spans multiple slots (for proper display)
+  const getColSpan = (entry: any) => {
+    if (!entry) return 1;
+    
+    const toMinutes = (time: string) => {
+      const [hours, mins] = time.split(':').map(Number);
+      return hours * 60 + mins;
+    };
+    
+    const duration = toMinutes(entry.endTime) - toMinutes(entry.startTime);
+    
+    // For 2-hour classes (120 minutes), span 2 columns
+    if (duration >= 115) return 2; // Account for slight variations
+    return 1;
+  };
+
+  // Track which slots have been rendered as part of a multi-column span
+  const renderedSlots = new Set<string>();
 
   const getCardColor = (index: number) => {
     const colors = [
@@ -180,62 +216,95 @@ const ViewTimetable: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {DAYS.map((day, dayIndex) => (
-                <tr key={dayIndex} className="border-b border-gray-200">
-                  <td className="px-4 py-4 border-r border-gray-300 bg-gray-50">
-                    <div className="text-sm font-semibold text-gray-900">{day}</div>
-                  </td>
-                  {TIME_SLOTS.map((slot, slotIndex) => {
-                    if (slot.isBreak) {
+              {DAYS.map((day, dayIndex) => {
+                const renderedSlots = new Set<number>();
+                
+                return (
+                  <tr key={dayIndex} className="border-b border-gray-200">
+                    <td className="px-4 py-4 border-r border-gray-300 bg-gray-50">
+                      <div className="text-sm font-semibold text-gray-900">{day}</div>
+                    </td>
+                    {TIME_SLOTS.map((slot, slotIndex) => {
+                      // Skip if already rendered as part of a colspan
+                      if (renderedSlots.has(slotIndex)) {
+                        return null;
+                      }
+
+                      if (slot.isBreak) {
+                        return (
+                          <td 
+                            key={slotIndex} 
+                            className="p-2 border-r border-gray-200 align-middle bg-amber-50"
+                          >
+                            <div className="text-center">
+                              <div className="text-xs font-semibold text-amber-700 mb-1">
+                                {slot.label}
+                              </div>
+                              <div className="text-xs text-amber-600">
+                                {slot.start} - {slot.end}
+                              </div>
+                            </div>
+                          </td>
+                        );
+                      }
+                      
+                      const classEntry = getClassForSlot(dayIndex, slot);
+                      const colSpan = classEntry ? getColSpan(classEntry) : 1;
+                      
+                      // Mark subsequent slots as rendered if this is a multi-column entry
+                      if (colSpan > 1) {
+                        for (let i = 1; i < colSpan; i++) {
+                          const nextSlotIndex = slotIndex + i;
+                          if (nextSlotIndex < TIME_SLOTS.length && !TIME_SLOTS[nextSlotIndex].isBreak) {
+                            renderedSlots.add(nextSlotIndex);
+                          }
+                        }
+                      }
+                      
                       return (
                         <td 
                           key={slotIndex} 
-                          className="p-2 border-r border-gray-200 align-middle bg-amber-50"
+                          colSpan={colSpan}
+                          className="p-2 border-r border-gray-200 align-top"
                         >
-                          <div className="text-center">
-                            <div className="text-xs font-semibold text-amber-700 mb-1">
-                              {slot.label}
+                          {classEntry ? (
+                            <div className={`rounded-lg p-3 border-2 shadow-sm hover:shadow-md transition-shadow ${getCardColor(slotIndex)}`}>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="text-sm font-bold text-gray-900">
+                                  {classEntry.subject.code}
+                                </div>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                  classEntry.subject.type === 'PRACTICAL' ? 'bg-orange-200 text-orange-800' :
+                                  classEntry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'bg-teal-200 text-teal-800' :
+                                  'bg-blue-200 text-blue-800'
+                                }`}>
+                                  {classEntry.subject.type === 'PRACTICAL' ? 'LAB' :
+                                   classEntry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'T+L' :
+                                   'TH'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-700 font-medium mb-1">
+                                {classEntry.faculty.name}
+                              </div>
+                              <div className="text-xs text-gray-600 mb-1">
+                                {classEntry.batch.name}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-300">
+                                {classEntry.startTime} - {classEntry.endTime}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Room: {classEntry.classroom.roomId}
+                              </div>
                             </div>
-                            <div className="text-xs text-amber-600">
-                              {slot.start} - {slot.end}
-                            </div>
-                          </div>
+                          ) : (
+                            <div className="h-full min-h-[100px]"></div>
+                          )}
                         </td>
                       );
-                    }
-                    
-                    const classEntry = getClassForSlot(dayIndex, slot);
-                    return (
-                      <td 
-                        key={slotIndex} 
-                        className="p-2 border-r border-gray-200 align-top"
-                      >
-                        {classEntry ? (
-                          <div className={`rounded-lg p-3 border-2 shadow-sm hover:shadow-md transition-shadow ${getCardColor(slotIndex)}`}>
-                            <div className="text-sm font-bold text-gray-900 mb-1">
-                              {classEntry.subject.code}
-                            </div>
-                            <div className="text-xs text-gray-700 font-medium mb-1">
-                              {classEntry.faculty.name}
-                            </div>
-                            <div className="text-xs text-gray-600 mb-1">
-                              {classEntry.batch.name}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-300">
-                              {slot.start} - {slot.end}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Room: {classEntry.classroom.roomId}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="h-full min-h-[100px]"></div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                    })}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

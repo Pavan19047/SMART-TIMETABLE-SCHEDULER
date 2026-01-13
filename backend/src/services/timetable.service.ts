@@ -74,6 +74,13 @@ export class TimetableGenerator {
     { startTime: '16:15', endTime: '17:15' },
   ];
 
+  // 2-hour slots for practical sessions
+  private practicalSlots: TimeSlot[] = [
+    { startTime: '09:00', endTime: '11:00' },
+    { startTime: '11:15', endTime: '13:15' },
+    { startTime: '14:00', endTime: '16:00' },
+  ];
+
   private workingDays = [0, 1, 2, 3, 4]; // Monday to Friday
   private constraintViolations: ConstraintViolation[] = [];
   private readonly SEMESTER_DURATION_WEEKS = 16; // Standard semester duration
@@ -216,6 +223,7 @@ export class TimetableGenerator {
     entries: TimetableEntry[]
   ): number {
     let classesScheduled = 0;
+    const isPractical = subject.type === 'PRACTICAL' || subject.type === 'THEORY_CUM_PRACTICAL';
 
     // Handle fixed slot first
     if (subject.fixedSlot) {
@@ -226,7 +234,8 @@ export class TimetableGenerator {
         batch.batchSize,
         fixed.dayOfWeek,
         fixed.startTime,
-        schedule
+        schedule,
+        isPractical ? 'LAB' : undefined
       );
 
       if (faculty && classroom) {
@@ -257,7 +266,8 @@ export class TimetableGenerator {
         subject,
         classrooms,
         schedule,
-        entries
+        entries,
+        isPractical
       );
 
       if (scheduled) {
@@ -275,12 +285,16 @@ export class TimetableGenerator {
     subject: any,
     classrooms: ClassroomWithAvailability[],
     schedule: Map<string, Set<string>>,
-    entries: TimetableEntry[]
+    entries: TimetableEntry[],
+    isPractical: boolean = false
   ): boolean {
     const attempts = this.generateAttemptOrder();
+    const slotsToUse = isPractical ? this.practicalSlots : this.timeSlots;
 
     for (const { day, slotIndex } of attempts) {
-      const slot = this.timeSlots[slotIndex];
+      if (slotIndex >= slotsToUse.length) continue;
+      
+      const slot = slotsToUse[slotIndex];
       const faculty = this.selectFaculty(subject.faculties, day, slot.startTime);
 
       if (!faculty) continue;
@@ -311,7 +325,8 @@ export class TimetableGenerator {
         batch.batchSize,
         day,
         slot.startTime,
-        schedule
+        schedule,
+        isPractical ? 'LAB' : undefined
       );
 
       if (!classroom) continue;
@@ -373,11 +388,15 @@ export class TimetableGenerator {
     requiredCapacity: number,
     dayOfWeek: number,
     startTime: string,
-    schedule: Map<string, Set<string>>
+    schedule: Map<string, Set<string>>,
+    preferredType?: string
   ): ClassroomWithAvailability | null {
     const suitable = classrooms.filter((classroom) => {
       // Check capacity
       if (classroom.capacity < requiredCapacity) return false;
+
+      // Check type preference (for practical sessions, prefer LAB type)
+      if (preferredType && classroom.type !== preferredType) return false;
 
       // Check availability
       if (classroom.availability.length > 0) {
@@ -394,7 +413,13 @@ export class TimetableGenerator {
       return !schedule.has(key);
     });
 
-    if (suitable.length === 0) return null;
+    if (suitable.length === 0) {
+      // If no classroom with preferred type found, try without type restriction
+      if (preferredType) {
+        return this.findAvailableClassroom(classrooms, requiredCapacity, dayOfWeek, startTime, schedule);
+      }
+      return null;
+    }
 
     // Sort by capacity (prefer smaller rooms)
     suitable.sort((a, b) => a.capacity - b.capacity);
@@ -422,6 +447,7 @@ export class TimetableGenerator {
   }
 
   private updateSchedule(schedule: Map<string, Set<string>>, entry: TimetableEntry): void {
+    // Block the main time slot
     const batchKey = this.getScheduleKey('batch', entry.batchId, entry.dayOfWeek, entry.startTime);
     const facultyKey = this.getScheduleKey('faculty', entry.facultyId, entry.dayOfWeek, entry.startTime);
     const classroomKey = this.getScheduleKey('classroom', entry.classroomId, entry.dayOfWeek, entry.startTime);
@@ -429,6 +455,54 @@ export class TimetableGenerator {
     schedule.set(batchKey, new Set([entry.startTime]));
     schedule.set(facultyKey, new Set([entry.startTime]));
     schedule.set(classroomKey, new Set([entry.startTime]));
+
+    // For 2-hour blocks (practical), also block all overlapping 1-hour slots
+    const duration = this.getSlotDuration(entry.startTime, entry.endTime);
+    if (duration >= 2) {
+      // This is a 2-hour slot, block the intermediate time slots
+      const overlappingSlots = this.getOverlappingSlots(entry.startTime, entry.endTime);
+      for (const slotTime of overlappingSlots) {
+        const batchSlotKey = this.getScheduleKey('batch', entry.batchId, entry.dayOfWeek, slotTime);
+        const facultySlotKey = this.getScheduleKey('faculty', entry.facultyId, entry.dayOfWeek, slotTime);
+        const classroomSlotKey = this.getScheduleKey('classroom', entry.classroomId, entry.dayOfWeek, slotTime);
+        
+        schedule.set(batchSlotKey, new Set([slotTime]));
+        schedule.set(facultySlotKey, new Set([slotTime]));
+        schedule.set(classroomSlotKey, new Set([slotTime]));
+      }
+    }
+  }
+
+  private getSlotDuration(startTime: string, endTime: string): number {
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    return (endMinutes - startMinutes) / 60;
+  }
+
+  private getOverlappingSlots(startTime: string, endTime: string): string[] {
+    const overlapping: string[] = [];
+    const [startHour, startMin] = startTime.split(':').map(Number);
+    const [endHour, endMin] = endTime.split(':').map(Number);
+    
+    // Check all 1-hour slots that fall within this time range
+    for (const slot of this.timeSlots) {
+      const [slotStartHour, slotStartMin] = slot.startTime.split(':').map(Number);
+      const [slotEndHour, slotEndMin] = slot.endTime.split(':').map(Number);
+      
+      const slotStartMinutes = slotStartHour * 60 + slotStartMin;
+      const slotEndMinutes = slotEndHour * 60 + slotEndMin;
+      const rangeStartMinutes = startHour * 60 + startMin;
+      const rangeEndMinutes = endHour * 60 + endMin;
+      
+      // Check if slot overlaps with the range
+      if (slotStartMinutes >= rangeStartMinutes && slotEndMinutes <= rangeEndMinutes && slot.startTime !== startTime) {
+        overlapping.push(slot.startTime);
+      }
+    }
+    
+    return overlapping;
   }
 
   private getScheduleKey(

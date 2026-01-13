@@ -17,6 +17,7 @@ export const createSubject = async (req: AuthRequest, res: Response) => {
       code,
       departmentId,
       semester,
+      type,
       weeklyClassesRequired,
       courseDurationWeeks,
       totalHoursRequired,
@@ -26,6 +27,9 @@ export const createSubject = async (req: AuthRequest, res: Response) => {
 
     // Auto-calculate total hours if not provided
     const calculatedTotalHours = totalHoursRequired || (weeklyClassesRequired * (courseDurationWeeks || 16));
+
+    // Determine hours per session based on type
+    const hoursPerSession = (type === 'PRACTICAL' || type === 'THEORY_CUM_PRACTICAL') ? 2 : 1;
 
     // Generate basic concepts if not provided
     const defaultConcepts = conceptsCovered || [
@@ -41,6 +45,8 @@ export const createSubject = async (req: AuthRequest, res: Response) => {
         code,
         departmentId,
         semester,
+        type: type || 'THEORY',
+        hoursPerSession,
         weeklyClassesRequired,
         courseDurationWeeks: courseDurationWeeks || 16,
         totalHoursRequired: calculatedTotalHours,
