@@ -286,6 +286,9 @@ const ViewTimetable: React.FC = () => {
                               <div className="text-xs text-gray-700 font-medium mb-1">
                                 {classEntry.faculty.name}
                               </div>
+                              <div className="text-xs text-gray-600 mb-1.5">
+                                {classEntry.subject.name}
+                              </div>
                               <div className="text-xs text-gray-600 mb-1">
                                 {classEntry.batch.name}
                               </div>

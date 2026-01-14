@@ -110,11 +110,23 @@ export class TimetableGenerator {
       const shuffledBatches = this.shuffle([...batches]);
 
       for (const batch of shuffledBatches) {
+        console.log(`\n=== Processing Batch: ${batch.name} ===`);
+        console.log(`Subjects in batch: ${batch.subjects.length}`);
+        
         // Track weekly hours for each subject
         const subjectHoursScheduled = new Map<string, number>();
 
         for (const batchSubject of batch.subjects) {
           const subject = batchSubject.subject;
+          
+          console.log(`\nProcessing Subject: ${subject.name} (${subject.code})`);
+          console.log(`  Type: ${subject.type}`);
+          console.log(`  Weekly Classes Required: ${subject.weeklyClassesRequired}`);
+          console.log(`  Hours Per Session: ${subject.hoursPerSession}`);
+          console.log(`  Faculties Assigned: ${subject.faculties.length}`);
+          if (subject.faculties.length > 0) {
+            console.log(`  Faculty Names: ${subject.faculties.map((f: any) => f.faculty.name).join(', ')}`);
+          }
           
           // Validate course can be completed within semester duration
           const totalHoursNeeded = subject.totalHoursRequired || (subject.weeklyClassesRequired * this.SEMESTER_DURATION_WEEKS);
@@ -140,6 +152,8 @@ export class TimetableGenerator {
             schedule,
             entries
           );
+
+          console.log(`  Classes Scheduled: ${classesScheduled} / ${subject.weeklyClassesRequired}`);
 
           subjectHoursScheduled.set(subject.id, classesScheduled);
 
@@ -223,19 +237,64 @@ export class TimetableGenerator {
     entries: TimetableEntry[]
   ): number {
     let classesScheduled = 0;
-    const isPractical = subject.type === 'PRACTICAL' || subject.type === 'THEORY_CUM_PRACTICAL';
+    const isPractical = subject.type === 'PRACTICAL';
+    const isTheoryCumPractical = subject.type === 'THEORY_CUM_PRACTICAL';
+
+    // For THEORY_CUM_PRACTICAL, select a faculty once and use for all sessions
+    let assignedFaculty = null;
+    if (isTheoryCumPractical) {
+      if (subject.faculties.length === 0) {
+        // No faculty assigned to this subject
+        this.constraintViolations.push({
+          type: 'NO_FACULTY_ASSIGNED',
+          message: `No faculty assigned to ${subject.name} (${subject.code})`,
+          details: {
+            subject: subject.name,
+            code: subject.code,
+            batch: batch.name,
+            type: 'THEORY_CUM_PRACTICAL',
+          },
+        });
+        return 0; // Cannot schedule without faculty
+      }
+      
+      // Pick a faculty that has availability
+      const facultyWithAvailability = subject.faculties.find((fs: any) => 
+        fs.faculty.availability.length === 0 || fs.faculty.availability.length > 0
+      );
+      
+      if (facultyWithAvailability) {
+        assignedFaculty = facultyWithAvailability.faculty;
+      } else {
+        // If no faculty available, log constraint violation
+        this.constraintViolations.push({
+          type: 'NO_FACULTY_AVAILABLE',
+          message: `No faculty available for ${subject.name} (${subject.code})`,
+          details: {
+            subject: subject.name,
+            code: subject.code,
+            batch: batch.name,
+            type: 'THEORY_CUM_PRACTICAL',
+            facultiesChecked: subject.faculties.length,
+          },
+        });
+        return 0; // Cannot schedule without faculty
+      }
+    }
 
     // Handle fixed slot first
     if (subject.fixedSlot) {
       const fixed = subject.fixedSlot as any;
-      const faculty = this.selectFaculty(subject.faculties, fixed.dayOfWeek, fixed.startTime);
+      const faculty = isTheoryCumPractical && assignedFaculty 
+        ? assignedFaculty 
+        : this.selectFaculty(subject.faculties, fixed.dayOfWeek, fixed.startTime);
       const classroom = this.findAvailableClassroom(
         classrooms,
         batch.batchSize,
         fixed.dayOfWeek,
         fixed.startTime,
         schedule,
-        isPractical ? 'LAB' : undefined
+        (isPractical || isTheoryCumPractical) ? 'LAB' : "CLASSROOM"
       );
 
       if (faculty && classroom) {
@@ -260,20 +319,91 @@ export class TimetableGenerator {
     // Schedule remaining classes
     const remainingClasses = subject.weeklyClassesRequired - classesScheduled;
 
-    for (let i = 0; i < remainingClasses; i++) {
-      const scheduled = this.scheduleOneClass(
-        batch,
-        subject,
-        classrooms,
-        schedule,
-        entries,
-        isPractical
-      );
+    // For THEORY_CUM_PRACTICAL, split into theory and practical in 1:2 ratio
+    if (isTheoryCumPractical) {
+      // Calculate theory and practical sessions (1:2 ratio)
+      // For every 3 hours, 1 is theory (1-hour) and 2 are practical (2-hour session)
+      const hoursPerSession = subject.hoursPerSession || 1;
+      const totalHours = remainingClasses * hoursPerSession;
+      const theoryHours = Math.floor(totalHours / 3); // 1 part theory
+      const practicalHours = totalHours - theoryHours; // 2 parts practical
+      
+      console.log(`Scheduling ${subject.name} (${subject.code}): ${totalHours} total hours = ${theoryHours} theory + ${practicalHours} practical`);
+      
+      // Schedule theory sessions (1-hour slots)
+      for (let i = 0; i < theoryHours; i++) {
+        const scheduled = this.scheduleOneClass(
+          batch,
+          subject,
+          classrooms,
+          schedule,
+          entries,
+          false, // Use regular slots for theory
+          assignedFaculty
+        );
 
-      if (scheduled) {
-        classesScheduled++;
-      } else {
-        break;
+        if (scheduled) {
+          classesScheduled++;
+        } else {
+          console.log(`Failed to schedule theory session ${i + 1} for ${subject.name}`);
+        }
+      }
+
+      // Schedule practical sessions (2-hour slots)
+      const practicalSessions = Math.ceil(practicalHours / 2); // Each practical is 2 hours
+      for (let i = 0; i < practicalSessions; i++) {
+        const scheduled = this.scheduleOneClass(
+          batch,
+          subject,
+          classrooms,
+          schedule,
+          entries,
+          true, // Use practical slots for labs
+          assignedFaculty
+        );
+
+        if (scheduled) {
+          classesScheduled++;
+        } else {
+          console.log(`Failed to schedule practical session ${i + 1} for ${subject.name}`);
+        }
+      }
+
+      // Log if we couldn't schedule all classes
+      if (classesScheduled < subject.weeklyClassesRequired) {
+        this.constraintViolations.push({
+          type: 'INCOMPLETE_THEORY_CUM_PRACTICAL',
+          message: `Could not schedule all classes for ${subject.name}`,
+          details: {
+            subject: subject.name,
+            code: subject.code,
+            batch: batch.name,
+            required: subject.weeklyClassesRequired,
+            scheduled: classesScheduled,
+            theoryHours,
+            practicalHours,
+            faculty: assignedFaculty?.name,
+          },
+        });
+      }
+    } else {
+      // Regular scheduling for THEORY and PRACTICAL subjects
+      for (let i = 0; i < remainingClasses; i++) {
+        const scheduled = this.scheduleOneClass(
+          batch,
+          subject,
+          classrooms,
+          schedule,
+          entries,
+          isPractical,
+          assignedFaculty
+        );
+
+        if (scheduled) {
+          classesScheduled++;
+        } else {
+          break;
+        }
       }
     }
 
@@ -286,7 +416,8 @@ export class TimetableGenerator {
     classrooms: ClassroomWithAvailability[],
     schedule: Map<string, Set<string>>,
     entries: TimetableEntry[],
-    isPractical: boolean = false
+    isPractical: boolean = false,
+    assignedFaculty: any = null
   ): boolean {
     const attempts = this.generateAttemptOrder();
     const slotsToUse = isPractical ? this.practicalSlots : this.timeSlots;
@@ -295,7 +426,17 @@ export class TimetableGenerator {
       if (slotIndex >= slotsToUse.length) continue;
       
       const slot = slotsToUse[slotIndex];
-      const faculty = this.selectFaculty(subject.faculties, day, slot.startTime);
+      // Use assigned faculty for THEORY_CUM_PRACTICAL, otherwise select dynamically
+      let faculty = assignedFaculty;
+      
+      if (assignedFaculty) {
+        // Check if assigned faculty is available at this time
+        if (!this.isFacultyAvailable(assignedFaculty, day, slot.startTime)) {
+          continue; // Faculty not available at this time
+        }
+      } else {
+        faculty = this.selectFaculty(subject.faculties, day, slot.startTime);
+      }
 
       if (!faculty) continue;
 
@@ -326,7 +467,7 @@ export class TimetableGenerator {
         day,
         slot.startTime,
         schedule,
-        isPractical ? 'LAB' : undefined
+        isPractical ? 'LAB' : 'CLASSROOM'
       );
 
       if (!classroom) continue;
@@ -361,6 +502,18 @@ export class TimetableGenerator {
     return newSlotIndex === firstSlotIndex - 1 || newSlotIndex === lastSlotIndex + 1;
   }
 
+  private isFacultyAvailable(faculty: any, dayOfWeek: number, startTime: string): boolean {
+    // If faculty has no availability restrictions, they're always available
+    if (!faculty.availability || faculty.availability.length === 0) return true;
+
+    // Check if faculty is available at this specific time
+    return faculty.availability.some(
+      (av: any) =>
+        av.dayOfWeek === dayOfWeek &&
+        this.isTimeInRange(startTime, av.startTime, av.endTime)
+    );
+  }
+
   private selectFaculty(
     facultyList: any[],
     dayOfWeek: number,
@@ -391,11 +544,12 @@ export class TimetableGenerator {
     schedule: Map<string, Set<string>>,
     preferredType?: string
   ): ClassroomWithAvailability | null {
-    const suitable = classrooms.filter((classroom) => {
+    // First: Try to find rooms with correct type and sufficient capacity
+    let suitable = classrooms.filter((classroom) => {
       // Check capacity
       if (classroom.capacity < requiredCapacity) return false;
 
-      // Check type preference (for practical sessions, prefer LAB type)
+      // Enforce type matching
       if (preferredType && classroom.type !== preferredType) return false;
 
       // Check availability
@@ -413,11 +567,43 @@ export class TimetableGenerator {
       return !schedule.has(key);
     });
 
-    if (suitable.length === 0) {
-      // If no classroom with preferred type found, try without type restriction
-      if (preferredType) {
-        return this.findAvailableClassroom(classrooms, requiredCapacity, dayOfWeek, startTime, schedule);
+    // Fallback: If no room with correct type found, use any available room
+    if (suitable.length === 0 && preferredType) {
+      suitable = classrooms.filter((classroom) => {
+        // Check capacity
+        if (classroom.capacity < requiredCapacity) return false;
+
+        // Check availability
+        if (classroom.availability.length > 0) {
+          const available = classroom.availability.some(
+            (av) =>
+              av.dayOfWeek === dayOfWeek &&
+              this.isTimeInRange(startTime, av.startTime, av.endTime)
+          );
+          if (!available) return false;
+        }
+
+        // Check if classroom is free
+        const key = this.getScheduleKey('classroom', classroom.id, dayOfWeek, startTime);
+        return !schedule.has(key);
+      });
+
+      // Log violation
+      if (suitable.length > 0) {
+        const room = suitable[0];
+        this.constraintViolations.push({
+          type: 'WRONG_CLASSROOM_TYPE',
+          message: `${preferredType} class using ${room.type} room`,
+          details: {
+            expectedType: preferredType,
+            actualType: room.type,
+            classroom: room.roomId,
+          },
+        });
       }
+    }
+
+    if (suitable.length === 0) {
       return null;
     }
 

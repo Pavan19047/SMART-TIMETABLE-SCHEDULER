@@ -103,6 +103,39 @@ export default function AllTimetables() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (filteredTimetables.length === 0) {
+      alert('No timetables to delete');
+      return;
+    }
+
+    const message = filteredTimetables.length === timetables.length
+      ? `Are you sure you want to delete ALL ${timetables.length} timetables? This action cannot be undone.`
+      : `Are you sure you want to delete ${filteredTimetables.length} filtered timetables? This action cannot be undone.`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    try {
+      // Delete all filtered timetables
+      const deletePromises = filteredTimetables.map(tt => 
+        api.delete(`/timetables/${tt.id}`)
+      );
+      
+      await Promise.all(deletePromises);
+      
+      // Remove deleted timetables from state
+      const deletedIds = new Set(filteredTimetables.map(tt => tt.id));
+      setTimetables(timetables.filter(t => !deletedIds.has(t.id)));
+      
+      alert(`Successfully deleted ${filteredTimetables.length} timetable(s)`);
+    } catch (error) {
+      console.error('Error deleting timetables:', error);
+      alert('Failed to delete some timetables. Please refresh and try again.');
+    }
+  };
+
   const uniqueSemesters = Array.from(new Set(timetables.map(tt => tt.semester))).sort((a, b) => a - b);
 
   if (loading) {
@@ -117,12 +150,22 @@ export default function AllTimetables() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">All Timetables</h1>
-        <button
-          onClick={() => navigate('/generate-timetable')}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
-        >
-          Generate New Timetable
-        </button>
+        <div className="flex gap-3">
+          {timetables.length > 0 && (
+            <button
+              onClick={handleDeleteAll}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
+            >
+              Delete All ({filteredTimetables.length})
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/generate-timetable')}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+          >
+            Generate New Timetable
+          </button>
+        </div>
       </div>
 
       {error && (

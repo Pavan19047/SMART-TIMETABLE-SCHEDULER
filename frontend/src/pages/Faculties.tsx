@@ -4,10 +4,13 @@ import api from '../lib/api';
 const Faculties: React.FC = () => {
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', departmentId: '', maxClassesPerDay: '4', weeklyLoadLimit: '20' });
+  const [managingFaculty, setManagingFaculty] = useState<any>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -15,9 +18,14 @@ const Faculties: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [facRes, deptRes] = await Promise.all([api.get('/faculties'), api.get('/departments')]);
+      const [facRes, deptRes, subjRes] = await Promise.all([
+        api.get('/faculties'), 
+        api.get('/departments'),
+        api.get('/subjects')
+      ]);
       setFaculties(facRes.data.faculties);
       setDepartments(deptRes.data.departments);
+      setSubjects(subjRes.data.subjects);
       setLoading(false);
     } catch (error) {
       console.error('Error:', error);
@@ -51,6 +59,46 @@ const Faculties: React.FC = () => {
     }
   };
 
+  const handleAddSubject = async () => {
+    if (!selectedSubjectId || !managingFaculty) return;
+    try {
+      console.log('Adding subject:', selectedSubjectId, 'to faculty:', managingFaculty.id);
+      await api.post(`/faculties/${managingFaculty.id}/subjects`, { subjectId: selectedSubjectId });
+      setSelectedSubjectId('');
+      alert('Subject added successfully!');
+      fetchData();
+      const res = await api.get(`/faculties/${managingFaculty.id}`);
+      setManagingFaculty(res.data.faculty);
+    } catch (error: any) {
+      console.error('Failed to add subject:', error);
+      alert(error.response?.data?.error || 'Failed to add subject');
+    }
+  };
+
+  const handleRemoveSubject = async (facultyId: string, subjectId: string) => {
+    if (!confirm('Remove this subject from the faculty?')) return;
+    try {
+      await api.delete(`/faculties/${facultyId}/subjects/${subjectId}`);
+      fetchData();
+      const res = await api.get(`/faculties/${facultyId}`);
+      setManagingFaculty(res.data.faculty);
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to remove subject');
+    }
+  };
+
+  const openManageSubjects = async (faculty: any) => {
+    try {
+      console.log('Opening manage subjects for faculty:', faculty.id);
+      const res = await api.get(`/faculties/${faculty.id}`);
+      console.log('Faculty details received:', res.data);
+      setManagingFaculty(res.data.faculty);
+    } catch (error: any) {
+      console.error('Failed to load faculty details:', error);
+      alert('Failed to load faculty details: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   if (loading) return <div className="flex justify-center items-center h-64">Loading...</div>;
 
   return (
@@ -60,7 +108,6 @@ const Faculties: React.FC = () => {
         <button onClick={() => setShowForm(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-md">Add Faculty</button>
       </div>
 
-      {/* Branch Filter */}
       <div className="mb-6 bg-white shadow rounded-lg p-4">
         <label className="block text-sm font-medium mb-2">Filter by Branch/Department</label>
         <select 
@@ -92,6 +139,67 @@ const Faculties: React.FC = () => {
         </div>
       )}
 
+      {managingFaculty && (
+        <div className="mb-6 bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Manage Subjects - {managingFaculty.name}</h2>
+            <button onClick={() => setManagingFaculty(null)} className="text-gray-600">✕ Close</button>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Add Subject</label>
+            <div className="flex space-x-2">
+              <select 
+                className="flex-1 rounded-md border px-3 py-2" 
+                value={selectedSubjectId}
+                onChange={(e) => setSelectedSubjectId(e.target.value)}
+              >
+                <option value="">Select Subject</option>
+                {subjects
+                  .filter(s => s.departmentId === managingFaculty.departmentId)
+                  .filter(s => !managingFaculty.subjects.some((fs: any) => fs.subject.id === s.id))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>{s.code} - {s.name} (Semester {s.semester})</option>
+                  ))}
+              </select>
+              <button 
+                onClick={handleAddSubject}
+                disabled={!selectedSubjectId}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md disabled:bg-gray-300"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-medium mb-2">Current Subjects ({managingFaculty.subjects.length})</h3>
+            {managingFaculty.subjects.length === 0 ? (
+              <p className="text-sm text-gray-500">No subjects assigned</p>
+            ) : (
+              <ul className="space-y-2">
+                {managingFaculty.subjects.map((fs: any) => (
+                  <li key={fs.id} className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded">
+                    <div>
+                      <span className="font-medium">{fs.subject.code}</span>
+                      <span className="text-gray-600 ml-2">{fs.subject.name}</span>
+                      <span className="text-xs ml-2 px-2 py-1 bg-purple-100 text-purple-800 rounded">Sem {fs.subject.semester}</span>
+                      <span className="text-xs ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded">{fs.subject.type}</span>
+                    </div>
+                    <button 
+                      onClick={() => handleRemoveSubject(managingFaculty.id, fs.subject.id)}
+                      className="text-red-600 text-sm"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="bg-white shadow rounded-md">
         {filteredFaculties.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
@@ -100,13 +208,23 @@ const Faculties: React.FC = () => {
         ) : (
           <ul className="divide-y">
             {filteredFaculties.map((fac) => (
-              <li key={fac.id} className="px-6 py-4 flex justify-between">
-                <div>
-                  <h3 className="font-medium">{fac.name}</h3>
-                  <p className="text-sm text-gray-500">{fac.email} • {fac.department.name}</p>
-                  <p className="text-sm text-gray-400">Max: {fac.maxClassesPerDay}/day • Weekly: {fac.weeklyLoadLimit}</p>
+              <li key={fac.id} className="px-6 py-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-medium">{fac.name}</h3>
+                    <p className="text-sm text-gray-500">{fac.email} • {fac.department.name}</p>
+                    <p className="text-sm text-gray-400">Max: {fac.maxClassesPerDay}/day • Weekly: {fac.weeklyLoadLimit}</p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button 
+                      onClick={() => openManageSubjects(fac)}
+                      className="text-indigo-600 hover:text-indigo-800"
+                    >
+                      Manage Subjects
+                    </button>
+                    <button onClick={() => handleDelete(fac.id)} className="text-red-600">Delete</button>
+                  </div>
                 </div>
-                <button onClick={() => handleDelete(fac.id)} className="text-red-600">Delete</button>
               </li>
             ))}
           </ul>
