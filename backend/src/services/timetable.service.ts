@@ -16,12 +16,16 @@ interface BatchWithDetails {
       id: string;
       name: string;
       code: string;
+      type: string;
       weeklyClassesRequired: number;
+      hoursPerSession: number;
+      totalHoursRequired: number;
       fixedSlot: any;
       faculties: {
         faculty: {
           id: string;
           name: string;
+          designation: string;
           maxClassesPerDay: number;
           weeklyLoadLimit: number;
           availability: {
@@ -64,27 +68,58 @@ interface ConstraintViolation {
 }
 
 export class TimetableGenerator {
+  // 50-minute theory slots
+  // Structure: 2 slots | SHORT BREAK | 2 slots | LUNCH | 1 slot after lunch | SHORT BREAK | 2 slots
   private timeSlots: TimeSlot[] = [
-    { startTime: '09:00', endTime: '10:00' },
-    { startTime: '10:00', endTime: '11:00' },
-    { startTime: '11:15', endTime: '12:15' },
-    { startTime: '12:15', endTime: '13:15' },
-    { startTime: '14:00', endTime: '15:00' },
-    { startTime: '15:00', endTime: '16:00' },
-    { startTime: '16:15', endTime: '17:15' },
+    { startTime: '09:00', endTime: '09:50' },  // Hour 1
+    { startTime: '09:55', endTime: '10:45' },  // Hour 2
+    // SHORT BREAK 10:45-11:00
+    { startTime: '11:00', endTime: '11:50' },  // Hour 3
+    { startTime: '11:55', endTime: '12:45' },  // Hour 4
+    // LUNCH BREAK 12:45-13:30
+    { startTime: '13:30', endTime: '14:20' },  // Hour 5 (1 slot after lunch)
+    // SHORT BREAK 14:20-14:35
+    { startTime: '14:35', endTime: '15:25' },  // Hour 6
+    { startTime: '15:30', endTime: '16:20' },  // Hour 7
   ];
 
-  // 2-hour slots for practical sessions
+  // 1h45m (105-minute) lab-only slots (for pure PRACTICAL subjects)
   private practicalSlots: TimeSlot[] = [
-    { startTime: '09:00', endTime: '11:00' },
-    { startTime: '11:15', endTime: '13:15' },
-    { startTime: '14:00', endTime: '16:00' },
+    { startTime: '11:00', endTime: '12:45' }, // Hours 3+4 (before lunch)
+    { startTime: '14:35', endTime: '16:20' }, // Hours 6+7 (after afternoon break)
+  ];
+
+  // THEORY_CUM_PRACTICAL: theory slot + short break + lab slot on the SAME DAY
+  // Both sessions are booked together as one combined block.
+  private combinedTheoryLabPairs: { theory: TimeSlot; lab: TimeSlot }[] = [
+    {
+      theory: { startTime: '09:55', endTime: '10:45' }, // Hour 2
+      lab:    { startTime: '11:00', endTime: '12:45' }, // Hours 3+4 (after short break)
+    },
+    {
+      theory: { startTime: '13:30', endTime: '14:20' }, // Hour 5
+      lab:    { startTime: '14:35', endTime: '16:20' }, // Hours 6+7 (after short break)
+    },
+  ];
+
+  // Break time ranges — no class should ever start or run during these windows
+  private breakRanges = [
+    { start: '10:45', end: '11:00' }, // Morning short break
+    { start: '12:45', end: '13:30' }, // Lunch break
+    { start: '14:20', end: '14:35' }, // Afternoon short break
   ];
 
   private workingDays = [0, 1, 2, 3, 4]; // Monday to Friday
   private constraintViolations: ConstraintViolation[] = [];
   private readonly SEMESTER_DURATION_WEEKS = 16; // Standard semester duration
   private readonly MIN_FREE_PERIODS_PER_WEEK = 2; // Minimum free periods per week for students
+  private readonly MAX_STUDENT_WEEKLY_HOURS = 20; // Maximum teaching hours per week for a batch
+  // Designation-based faculty weekly load limits (hours)
+  private readonly FACULTY_WEEKLY_LOAD: Record<string, number> = {
+    ASSISTANT_PROFESSOR: 16,
+    PROFESSOR: 14,
+    HOD: 12,
+  };
 
   getConstraintViolations(): ConstraintViolation[] {
     return this.constraintViolations;
@@ -101,6 +136,7 @@ export class TimetableGenerator {
 
     // Try to generate 3 different timetable options
     for (let attempt = 0; attempt < 3; attempt++) {
+      this.constraintViolations = []; // Reset violations for each fresh attempt
       const entries: TimetableEntry[] = [];
       const schedule = this.initializeSchedule();
 
@@ -129,17 +165,18 @@ export class TimetableGenerator {
           }
           
           // Validate course can be completed within semester duration
-          const totalHoursNeeded = subject.totalHoursRequired || (subject.weeklyClassesRequired * this.SEMESTER_DURATION_WEEKS);
-          const maxWeeklyHours = subject.weeklyClassesRequired;
+          const hoursPerSessionVal = subject.hoursPerSession || 1;
+          const totalHoursNeeded = subject.totalHoursRequired || (subject.weeklyClassesRequired * hoursPerSessionVal * this.SEMESTER_DURATION_WEEKS);
+          const maxPossibleHours = subject.weeklyClassesRequired * hoursPerSessionVal * this.SEMESTER_DURATION_WEEKS;
           
-          if (maxWeeklyHours * this.SEMESTER_DURATION_WEEKS < totalHoursNeeded) {
+          if (maxPossibleHours < totalHoursNeeded) {
             this.constraintViolations.push({
               type: 'DURATION_INSUFFICIENT',
               message: `${subject.name} cannot be completed within semester duration`,
               details: {
                 subject: subject.name,
                 totalHoursNeeded,
-                maxPossibleHours: maxWeeklyHours * this.SEMESTER_DURATION_WEEKS,
+                maxPossibleHours,
                 semesterWeeks: this.SEMESTER_DURATION_WEEKS,
               },
             });
@@ -172,19 +209,19 @@ export class TimetableGenerator {
           }
         }
 
-        // Ensure minimum free periods for students
-        const batchWeeklyClasses = entries.filter(e => e.batchId === batch.id).length;
+        // Ensure minimum free periods and cap at MAX_STUDENT_WEEKLY_HOURS for students
+        const batchWeeklyHours = this.calculateWeeklyHours(entries, 'batchId', batch.id);
         const maxPossibleSlots = this.timeSlots.length * this.workingDays.length;
-        const freePeriods = maxPossibleSlots - batchWeeklyClasses;
+        const freePeriods = maxPossibleSlots - entries.filter(e => e.batchId === batch.id).length;
         
-        if (freePeriods < this.MIN_FREE_PERIODS_PER_WEEK) {
+        if (batchWeeklyHours > this.MAX_STUDENT_WEEKLY_HOURS) {
           this.constraintViolations.push({
-            type: 'INSUFFICIENT_FREE_PERIODS',
-            message: `Batch ${batch.name} has insufficient free periods`,
+            type: 'EXCEEDS_STUDENT_WEEKLY_HOURS',
+            message: `Batch ${batch.name} exceeds maximum ${this.MAX_STUDENT_WEEKLY_HOURS} teaching hours per week`,
             details: {
               batch: batch.name,
-              freePeriods,
-              minimumRequired: this.MIN_FREE_PERIODS_PER_WEEK,
+              scheduledHours: batchWeeklyHours,
+              maxAllowed: this.MAX_STUDENT_WEEKLY_HOURS,
             },
           });
         }
@@ -258,28 +295,8 @@ export class TimetableGenerator {
         return 0; // Cannot schedule without faculty
       }
       
-      // Pick a faculty that has availability
-      const facultyWithAvailability = subject.faculties.find((fs: any) => 
-        fs.faculty.availability.length === 0 || fs.faculty.availability.length > 0
-      );
-      
-      if (facultyWithAvailability) {
-        assignedFaculty = facultyWithAvailability.faculty;
-      } else {
-        // If no faculty available, log constraint violation
-        this.constraintViolations.push({
-          type: 'NO_FACULTY_AVAILABLE',
-          message: `No faculty available for ${subject.name} (${subject.code})`,
-          details: {
-            subject: subject.name,
-            code: subject.code,
-            batch: batch.name,
-            type: 'THEORY_CUM_PRACTICAL',
-            facultiesChecked: subject.faculties.length,
-          },
-        });
-        return 0; // Cannot schedule without faculty
-      }
+      // Pick the first assigned faculty for the subject
+      assignedFaculty = subject.faculties[0].faculty;
     }
 
     // Handle fixed slot first
@@ -319,69 +336,35 @@ export class TimetableGenerator {
     // Schedule remaining classes
     const remainingClasses = subject.weeklyClassesRequired - classesScheduled;
 
-    // For THEORY_CUM_PRACTICAL, split into theory and practical in 1:2 ratio
+    // For THEORY_CUM_PRACTICAL: schedule each session as a paired same-day block
+    // (theory slot → short break → lab slot, both on the same day)
     if (isTheoryCumPractical) {
-      // Calculate theory and practical sessions (1:2 ratio)
-      // For every 3 hours, 1 is theory (1-hour) and 2 are practical (2-hour session)
-      const hoursPerSession = subject.hoursPerSession || 1;
-      const totalHours = remainingClasses * hoursPerSession;
-      const theoryHours = Math.floor(totalHours / 3); // 1 part theory
-      const practicalHours = totalHours - theoryHours; // 2 parts practical
-      
-      console.log(`Scheduling ${subject.name} (${subject.code}): ${totalHours} total hours = ${theoryHours} theory + ${practicalHours} practical`);
-      
-      // Schedule theory sessions (1-hour slots)
-      for (let i = 0; i < theoryHours; i++) {
-        const scheduled = this.scheduleOneClass(
+      for (let i = 0; i < remainingClasses; i++) {
+        const scheduled = this.scheduleOneCombinedSession(
           batch,
           subject,
           classrooms,
           schedule,
           entries,
-          false, // Use regular slots for theory
           assignedFaculty
         );
-
         if (scheduled) {
           classesScheduled++;
         } else {
-          console.log(`Failed to schedule theory session ${i + 1} for ${subject.name}`);
+          console.log(`Failed to schedule combined theory+lab session ${i + 1} for ${subject.name}`);
         }
       }
 
-      // Schedule practical sessions (2-hour slots)
-      const practicalSessions = Math.ceil(practicalHours / 2); // Each practical is 2 hours
-      for (let i = 0; i < practicalSessions; i++) {
-        const scheduled = this.scheduleOneClass(
-          batch,
-          subject,
-          classrooms,
-          schedule,
-          entries,
-          true, // Use practical slots for labs
-          assignedFaculty
-        );
-
-        if (scheduled) {
-          classesScheduled++;
-        } else {
-          console.log(`Failed to schedule practical session ${i + 1} for ${subject.name}`);
-        }
-      }
-
-      // Log if we couldn't schedule all classes
       if (classesScheduled < subject.weeklyClassesRequired) {
         this.constraintViolations.push({
           type: 'INCOMPLETE_THEORY_CUM_PRACTICAL',
-          message: `Could not schedule all classes for ${subject.name}`,
+          message: `Could not schedule all combined sessions for ${subject.name}`,
           details: {
             subject: subject.name,
             code: subject.code,
             batch: batch.name,
             required: subject.weeklyClassesRequired,
             scheduled: classesScheduled,
-            theoryHours,
-            practicalHours,
             faculty: assignedFaculty?.name,
           },
         });
@@ -419,6 +402,13 @@ export class TimetableGenerator {
     isPractical: boolean = false,
     assignedFaculty: any = null
   ): boolean {
+    // Enforce 20-hour weekly student schedule limit
+    const batchWeeklyHours = this.calculateWeeklyHours(entries, 'batchId', batch.id);
+    const sessionHours = isPractical ? 2 : 1;
+    if (batchWeeklyHours + sessionHours > this.MAX_STUDENT_WEEKLY_HOURS) {
+      return false;
+    }
+
     const attempts = this.generateAttemptOrder();
     const slotsToUse = isPractical ? this.practicalSlots : this.timeSlots;
 
@@ -426,6 +416,9 @@ export class TimetableGenerator {
       if (slotIndex >= slotsToUse.length) continue;
       
       const slot = slotsToUse[slotIndex];
+
+      // Hard guard: never schedule during a break window
+      if (this.isDuringBreak(slot.startTime) || this.isDuringBreak(slot.endTime)) continue;
       // Use assigned faculty for THEORY_CUM_PRACTICAL, otherwise select dynamically
       let faculty = assignedFaculty;
       
@@ -440,23 +433,19 @@ export class TimetableGenerator {
 
       if (!faculty) continue;
 
+      // Enforce faculty weekly load limit — use designation-based cap as source of truth
+      const facultyWeeklyHours = this.calculateWeeklyHours(entries, 'facultyId', faculty.id);
+      const designationCap = this.FACULTY_WEEKLY_LOAD[faculty.designation] ?? faculty.weeklyLoadLimit;
+      if (facultyWeeklyHours + sessionHours > designationCap) {
+        continue; // Faculty has reached their weekly load limit
+      }
+
       // Check if faculty already has classes on this day
       const facultyDayClasses = entries.filter(
         (e) => e.facultyId === faculty.id && e.dayOfWeek === day
       );
 
-      if (facultyDayClasses.length > 0) {
-        // Faculty already scheduled on this day - enforce consecutive classes
-        const facultyTimes = facultyDayClasses.map(e => e.startTime).sort();
-        const lastTime = facultyTimes[facultyTimes.length - 1];
-        const firstTime = facultyTimes[0];
-        
-        // Only allow scheduling if this slot is consecutive to existing slots
-        const isConsecutive = this.isConsecutiveSlot(slot.startTime, firstTime, lastTime);
-        if (!isConsecutive) {
-          continue; // Skip this slot, faculty must have consecutive classes
-        }
-      }
+      // Soft preference: avoid large gaps within a faculty's day (but don't hard-block)
 
       // Check faculty daily limit
       if (facultyDayClasses.length >= faculty.maxClassesPerDay) continue;
@@ -490,6 +479,108 @@ export class TimetableGenerator {
     }
 
     return false;
+  }
+
+  /**
+   * Schedule a THEORY_CUM_PRACTICAL subject as a combined same-day block:
+   * theory slot → short break → lab slot, both on the same day.
+   * Uses one of the predefined combinedTheoryLabPairs.
+   */
+  private scheduleOneCombinedSession(
+    batch: BatchWithDetails,
+    subject: any,
+    classrooms: ClassroomWithAvailability[],
+    schedule: Map<string, Set<string>>,
+    entries: TimetableEntry[],
+    assignedFaculty: any
+  ): boolean {
+    const days = this.shuffle([...this.workingDays]);
+    const pairs = this.shuffle([...this.combinedTheoryLabPairs]);
+
+    for (const day of days) {
+      for (const pair of pairs) {
+        const { theory, lab } = pair;
+
+        // Check faculty availability for both slots
+        if (!this.isFacultyAvailable(assignedFaculty, day, theory.startTime)) continue;
+        if (!this.isFacultyAvailable(assignedFaculty, day, lab.startTime)) continue;
+
+        // Check faculty daily class limit (theory + lab = 2 entries)
+        const existingFacultyDay = entries.filter(
+          (e) => e.facultyId === assignedFaculty.id && e.dayOfWeek === day
+        ).length;
+        if (existingFacultyDay + 2 > assignedFaculty.maxClassesPerDay) continue;
+
+        // Check faculty weekly load (theory ~0.83h + lab ~1.75h ≈ 2.58h)
+        const facultyWeeklyHours = this.calculateWeeklyHours(entries, 'facultyId', assignedFaculty.id);
+        const sessionHours = this.getSlotDuration(theory.startTime, theory.endTime)
+          + this.getSlotDuration(lab.startTime, lab.endTime);
+        const designationCap = this.FACULTY_WEEKLY_LOAD[assignedFaculty.designation] ?? assignedFaculty.weeklyLoadLimit;
+        if (facultyWeeklyHours + sessionHours > designationCap) continue;
+
+        // Check student weekly hour cap
+        const batchWeeklyHours = this.calculateWeeklyHours(entries, 'batchId', batch.id);
+        if (batchWeeklyHours + sessionHours > this.MAX_STUDENT_WEEKLY_HOURS) continue;
+
+        // Find a CLASSROOM for the theory session
+        const theoryRoom = this.findAvailableClassroom(
+          classrooms, batch.batchSize, day, theory.startTime, schedule, 'CLASSROOM'
+        );
+        if (!theoryRoom) continue;
+
+        // Find a LAB for the lab session
+        const labRoom = this.findAvailableClassroom(
+          classrooms, batch.batchSize, day, lab.startTime, schedule, 'LAB'
+        );
+        if (!labRoom) continue;
+
+        const theoryEntry: TimetableEntry = {
+          batchId: batch.id,
+          subjectId: subject.id,
+          facultyId: assignedFaculty.id,
+          classroomId: theoryRoom.id,
+          dayOfWeek: day,
+          startTime: theory.startTime,
+          endTime: theory.endTime,
+        };
+
+        const labEntry: TimetableEntry = {
+          batchId: batch.id,
+          subjectId: subject.id,
+          facultyId: assignedFaculty.id,
+          classroomId: labRoom.id,
+          dayOfWeek: day,
+          startTime: lab.startTime,
+          endTime: lab.endTime,
+        };
+
+        if (this.isValidEntry(theoryEntry, schedule) && this.isValidEntry(labEntry, schedule)) {
+          entries.push(theoryEntry);
+          this.updateSchedule(schedule, theoryEntry);
+          entries.push(labEntry);
+          this.updateSchedule(schedule, labEntry);
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private isDuringBreak(time: string): boolean {
+    const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const tMin = toMin(time);
+    return this.breakRanges.some(br => tMin > toMin(br.start) && tMin < toMin(br.end));
+  }
+
+  private calculateWeeklyHours(
+    entries: TimetableEntry[],
+    keyField: 'batchId' | 'facultyId',
+    id: string
+  ): number {
+    return entries
+      .filter((e) => e[keyField] === id)
+      .reduce((total, e) => total + this.getSlotDuration(e.startTime, e.endTime), 0);
   }
 
   private isConsecutiveSlot(newTime: string, firstExisting: string, lastExisting: string): boolean {
@@ -567,13 +658,11 @@ export class TimetableGenerator {
       return !schedule.has(key);
     });
 
-    // Fallback: If no room with correct type found, use any available room
-    if (suitable.length === 0 && preferredType) {
+    // Fallback: Only allow wrong-type fallback for CLASSROOM (theory) sessions, NOT for LAB/practical
+    if (suitable.length === 0 && preferredType && preferredType !== 'LAB') {
       suitable = classrooms.filter((classroom) => {
-        // Check capacity
         if (classroom.capacity < requiredCapacity) return false;
 
-        // Check availability
         if (classroom.availability.length > 0) {
           const available = classroom.availability.some(
             (av) =>
@@ -583,12 +672,10 @@ export class TimetableGenerator {
           if (!available) return false;
         }
 
-        // Check if classroom is free
         const key = this.getScheduleKey('classroom', classroom.id, dayOfWeek, startTime);
         return !schedule.has(key);
       });
 
-      // Log violation
       if (suitable.length > 0) {
         const room = suitable[0];
         this.constraintViolations.push({
@@ -602,6 +689,7 @@ export class TimetableGenerator {
         });
       }
     }
+    // For LAB sessions: no fallback — return null to try a different time slot
 
     if (suitable.length === 0) {
       return null;
@@ -721,61 +809,61 @@ export class TimetableGenerator {
     batches: BatchWithDetails[],
     classrooms: ClassroomWithAvailability[]
   ): number {
-    let score = 100;
+    // --- 1. Coverage score (0–80): % of required weekly classes actually scheduled ---
+    let totalRequired = 0;
+    batches.forEach((batch) => {
+      batch.subjects.forEach((bs) => {
+        totalRequired += bs.subject.weeklyClassesRequired;
+      });
+    });
+    const coverageRate = totalRequired > 0 ? Math.min(1, entries.length / totalRequired) : 1;
+    const coverageScore = coverageRate * 80;
 
-    // Penalty for constraint violations
-    score -= this.constraintViolations.length * 10;
-
-    // Check workload distribution
+    // --- 2. Workload distribution score (0–10): even faculty spread across days ---
+    let distributionScore = 10;
     const facultyWorkload = new Map<string, number[]>();
     entries.forEach((entry) => {
       if (!facultyWorkload.has(entry.facultyId)) {
         facultyWorkload.set(entry.facultyId, [0, 0, 0, 0, 0]);
       }
-      const workload = facultyWorkload.get(entry.facultyId)!;
-      workload[entry.dayOfWeek]++;
+      facultyWorkload.get(entry.facultyId)![entry.dayOfWeek]++;
     });
-
-    // Penalize uneven distribution
     facultyWorkload.forEach((workload) => {
       const avg = workload.reduce((a, b) => a + b, 0) / workload.length;
-      const variance = workload.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / workload.length;
-      score -= variance * 2;
+      const variance =
+        workload.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / workload.length;
+      distributionScore -= Math.min(2, variance * 0.4); // Gentle cap per faculty
     });
+    distributionScore = Math.max(0, distributionScore);
 
-    // Reward high classroom utilization
-    const classroomUsage = new Map<string, number>();
-    entries.forEach((entry) => {
-      classroomUsage.set(entry.classroomId, (classroomUsage.get(entry.classroomId) || 0) + 1);
-    });
-
-    const utilizationRate = classroomUsage.size / classrooms.length;
-    score += utilizationRate * 10;
-
-    // Check for idle time (gaps between classes)
+    // --- 3. Gap score (0–10): penalise idle time in student schedule ---
+    let gapScore = 10;
     batches.forEach((batch) => {
       const batchEntries = entries.filter((e) => e.batchId === batch.id);
       const dayGroups = new Map<number, TimetableEntry[]>();
-
       batchEntries.forEach((entry) => {
-        if (!dayGroups.has(entry.dayOfWeek)) {
-          dayGroups.set(entry.dayOfWeek, []);
-        }
+        if (!dayGroups.has(entry.dayOfWeek)) dayGroups.set(entry.dayOfWeek, []);
         dayGroups.get(entry.dayOfWeek)!.push(entry);
       });
-
       dayGroups.forEach((dayEntries) => {
         dayEntries.sort((a, b) => a.startTime.localeCompare(b.startTime));
         for (let i = 0; i < dayEntries.length - 1; i++) {
           const gap = this.getMinutesBetween(dayEntries[i].endTime, dayEntries[i + 1].startTime);
-          if (gap > 60) {
-            score -= 2; // Penalize large gaps
-          }
+          if (gap > 60) gapScore -= 0.5;
         }
       });
     });
+    gapScore = Math.max(0, gapScore);
 
-    return Math.max(0, score);
+    // --- 4. Critical-violation penalty (capped at 5) ---
+    const criticalTypes = ['NO_FACULTY_ASSIGNED', 'WRONG_CLASSROOM_TYPE', 'DURATION_INSUFFICIENT'];
+    const criticalCount = this.constraintViolations.filter((v) =>
+      criticalTypes.includes(v.type)
+    ).length;
+    const violationPenalty = Math.min(5, criticalCount);
+
+    const total = coverageScore + distributionScore + gapScore - violationPenalty;
+    return Math.round(Math.max(0, Math.min(100, total)));
   }
 
   private isTimeInRange(time: string, start: string, end: string): boolean {

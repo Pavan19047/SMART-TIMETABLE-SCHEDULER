@@ -17,16 +17,16 @@ interface TimetableData {
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIME_SLOTS = [
-  { label: 'HOUR 1', start: '09:00', end: '10:00' },
-  { label: 'HOUR 2', start: '10:00', end: '11:00' },
-  { label: 'SHORT BREAK', start: '11:00', end: '11:15', isBreak: true },
-  { label: 'HOUR 3', start: '11:15', end: '12:15' },
-  { label: 'HOUR 4', start: '12:15', end: '13:15' },
-  { label: 'LUNCH BREAK', start: '13:15', end: '14:00', isBreak: true },
-  { label: 'HOUR 5', start: '14:00', end: '15:00' },
-  { label: 'HOUR 6', start: '15:00', end: '16:00' },
-  { label: 'SHORT BREAK', start: '16:00', end: '16:15', isBreak: true },
-  { label: 'HOUR 7', start: '16:15', end: '17:15' },
+  { label: 'HOUR 1',      start: '09:00', end: '09:50' },
+  { label: 'HOUR 2',      start: '09:55', end: '10:45' },
+  { label: 'SHORT BREAK', start: '10:45', end: '11:00', isBreak: true },
+  { label: 'HOUR 3',      start: '11:00', end: '11:50' },
+  { label: 'HOUR 4',      start: '11:55', end: '12:45' },
+  { label: 'LUNCH BREAK', start: '12:45', end: '13:30', isBreak: true },
+  { label: 'HOUR 5',      start: '13:30', end: '14:20' },
+  { label: 'SHORT BREAK', start: '14:20', end: '14:35', isBreak: true },
+  { label: 'HOUR 6',      start: '14:35', end: '15:25' },
+  { label: 'HOUR 7',      start: '15:30', end: '16:20' },
 ];
 
 export const exportToPDF = async (timetable: TimetableData): Promise<Buffer> => {
@@ -174,14 +174,15 @@ export const exportToPDF = async (timetable: TimetableData): Promise<Buffer> => 
             }
             
             // Draw colored box for class spanning multiple slots
-            const bgColor = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' || entry.subject.type === 'THEORY_CUM_PRACTICAL'
-              ? '#90EE90' : '#E6F3FF';
+            const entryDuration = calculateDuration(entry.startTime, entry.endTime);
+            const isLabEntry = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' ||
+              (entry.subject.type === 'THEORY_CUM_PRACTICAL' && entryDuration > 60);
+            const bgColor = isLabEntry ? '#90EE90' : '#E6F3FF';
             doc.rect(x + 5, y + 5, totalWidth - 10, rowHeight - 10).fillAndStroke(bgColor, '#000000');
             
             // Subject type badge
-            const badge = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' || entry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'LAB' : 'TH';
-            const badgeColor = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' || entry.subject.type === 'THEORY_CUM_PRACTICAL'
-              ? '#FF6347' : '#4169E1';
+            const badge = isLabEntry ? 'LAB' : 'TH';
+            const badgeColor = isLabEntry ? '#FF6347' : '#4169E1';
             doc.rect(x + totalWidth - 40, y + 10, 30, 15).fillAndStroke(badgeColor, badgeColor);
             doc.fillColor('#FFFFFF').fontSize(7).font('Helvetica-Bold');
             doc.text(badge, x + totalWidth - 40, y + 13, { width: 30, align: 'center' });
@@ -191,10 +192,11 @@ export const exportToPDF = async (timetable: TimetableData): Promise<Buffer> => 
             doc.text(entry.subject.code, x + 10, y + 12, { width: totalWidth - 50 });
             
             doc.fontSize(7).font('Helvetica');
-            doc.text(entry.faculty.name, x + 10, y + 25, { width: totalWidth - 20 });
-            doc.text(entry.batch.name, x + 10, y + 37, { width: totalWidth - 20 });
+            doc.text(entry.subject.name, x + 10, y + 25, { width: totalWidth - 20 });
+            doc.text(entry.faculty.name, x + 10, y + 36, { width: totalWidth - 20 });
+            doc.text(entry.batch.name, x + 10, y + 47, { width: totalWidth - 20 });
             doc.text(`${entry.startTime} - ${entry.endTime}`, x + 10, y + 62, { width: totalWidth - 20 });
-            doc.text(`Room: ${entry.classroom.roomId}`, x + 10, y + 74, { width: totalWidth - 20 });
+            doc.text(`Room: ${entry.classroom.roomId}`, x + 10, y + 73, { width: totalWidth - 20 });
           } else {
             // Empty slot
             doc.rect(x, y, slotColumnWidth, rowHeight).stroke();
@@ -211,14 +213,15 @@ export const exportToExcel = async (timetable: TimetableData): Promise<Buffer> =
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Timetable');
 
+  // Total columns: 1 (DAY) + 10 (TIME_SLOTS) = 11 → A through K
   // Title
-  worksheet.mergeCells('A1:G1');
+  worksheet.mergeCells('A1:K1');
   const titleCell = worksheet.getCell('A1');
   titleCell.value = timetable.name;
   titleCell.font = { size: 16, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  worksheet.mergeCells('A2:G2');
+  worksheet.mergeCells('A2:K2');
   const semesterCell = worksheet.getCell('A2');
   semesterCell.value = `Semester: ${timetable.semester}`;
   semesterCell.alignment = { horizontal: 'center' };
@@ -326,8 +329,12 @@ export const exportToExcel = async (timetable: TimetableData): Promise<Buffer> =
         
         const entry = grid.get(dayIndex)?.get(slotIndex);
         if (entry) {
-          const type = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' || entry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'LAB' : 'TH';
+          const entryDurationExcel = calculateDurationExcel(entry.startTime, entry.endTime);
+          const isLabExcel = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' ||
+            (entry.subject.type === 'THEORY_CUM_PRACTICAL' && entryDurationExcel > 60);
+          const type = isLabExcel ? 'LAB' : 'TH';
           const content = `${entry.subject.code} [${type}]\n` +
+            `${entry.subject.name}\n` +
             `${entry.faculty.name}\n` +
             `${entry.batch.name}\n` +
             `${entry.startTime} - ${entry.endTime}\n` +
@@ -357,7 +364,7 @@ export const exportToExcel = async (timetable: TimetableData): Promise<Buffer> =
               startCol, 
               endCol, 
               content, 
-              isLab: type === 'LAB'
+              isLab: isLabExcel
             });
           }
           currentCol++;
@@ -446,7 +453,9 @@ export const exportToExcel = async (timetable: TimetableData): Promise<Buffer> =
         // Check if this is a regular (non-merged) class cell
         const entry = grid.get(dayIndex)?.get(slotIndex);
         if (entry && cell.value) {
-          const isLab = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' || entry.subject.type === 'THEORY_CUM_PRACTICAL';
+          const dur = calculateDurationExcel(entry.startTime, entry.endTime);
+          const isLab = entry.subject.type === 'LAB' || entry.subject.type === 'PRACTICAL' ||
+            (entry.subject.type === 'THEORY_CUM_PRACTICAL' && dur > 60);
           cell.fill = {
             type: 'pattern',
             pattern: 'solid',
@@ -464,5 +473,5 @@ export const exportToExcel = async (timetable: TimetableData): Promise<Buffer> =
     worksheet.getColumn(i).width = 30; // Wider columns for better readability
   }
 
-  return await workbook.xlsx.writeBuffer() as Buffer;
+  return await workbook.xlsx.writeBuffer() as unknown as Buffer;
 };

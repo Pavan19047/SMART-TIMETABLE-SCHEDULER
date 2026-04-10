@@ -3,53 +3,60 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
+interface StatCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  gradient: string;
+  to: string;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon, gradient, to }) => (
+  <Link to={to} className="group block">
+    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5">
+      <div className="flex items-center justify-between mb-4">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${gradient}`}>
+          <span className="w-5 h-5 text-white">{icon}</span>
+        </div>
+        <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all duration-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+      <p className="text-3xl font-bold text-slate-800 mb-1">{value}</p>
+      <p className="text-sm text-slate-500 font-medium">{label}</p>
+    </div>
+  </Link>
+);
+
+const statusConfig: Record<string, { label: string; cls: string }> = {
+  APPROVED: { label: 'Approved', cls: 'badge-green' },
+  LOCKED:   { label: 'Locked',   cls: 'badge-gray'  },
+  DRAFT:    { label: 'Draft',    cls: 'badge-yellow' },
+};
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    departments: 0,
-    classrooms: 0,
-    faculties: 0,
-    subjects: 0,
-    batches: 0,
-    timetables: 0,
-  });
+  const [stats, setStats] = useState({ departments: 0, classrooms: 0, faculties: 0, subjects: 0, batches: 0, timetables: 0 });
   const [timetables, setTimetables] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
+  useEffect(() => { fetchDashboardData(); }, []);
 
   const fetchDashboardData = async () => {
     try {
-      const [
-        deptRes,
-        classRes,
-        facRes,
-        subRes,
-        batchRes,
-        ttRes,
-      ] = await Promise.all([
-        api.get('/departments'),
-        api.get('/classrooms'),
-        api.get('/faculties'),
-        api.get('/subjects'),
-        api.get('/batches'),
-        api.get('/timetables'),
+      const [deptRes, classRes, facRes, subRes, batchRes, ttRes] = await Promise.all([
+        api.get('/departments'), api.get('/classrooms'), api.get('/faculties'),
+        api.get('/subjects'), api.get('/batches'), api.get('/timetables'),
       ]);
-
       setStats({
         departments: deptRes.data.departments?.length || 0,
-        classrooms: classRes.data.classrooms?.length || 0,
-        faculties: facRes.data.faculties?.length || 0,
-        subjects: subRes.data.subjects?.length || 0,
-        batches: batchRes.data.batches?.length || 0,
-        timetables: ttRes.data.timetables?.length || 0,
+        classrooms:  classRes.data.classrooms?.length  || 0,
+        faculties:   facRes.data.faculties?.length     || 0,
+        subjects:    subRes.data.subjects?.length      || 0,
+        batches:     batchRes.data.batches?.length     || 0,
+        timetables:  ttRes.data.timetables?.length     || 0,
       });
-
       setTimetables(ttRes.data.timetables?.slice(0, 5) || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
     } finally {
       setLoading(false);
     }
@@ -58,179 +65,113 @@ const Dashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg">Loading...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-500 font-medium">Loading dashboard…</p>
+        </div>
       </div>
     );
   }
 
+  const icons = {
+    departments: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>),
+    classrooms:  (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>),
+    faculties:   (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>),
+    subjects:    (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>),
+    batches:     (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M6 20v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>),
+    timetables:  (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>),
+  };
+
+  const statCards = [
+    { label: 'Departments',  value: stats.departments, icon: icons.departments, gradient: 'bg-indigo-500',  to: '/departments'       },
+    { label: 'Classrooms',   value: stats.classrooms,  icon: icons.classrooms,  gradient: 'bg-emerald-500', to: '/classrooms'        },
+    { label: 'Faculties',    value: stats.faculties,   icon: icons.faculties,   gradient: 'bg-amber-500',   to: '/faculties'         },
+    { label: 'Subjects',     value: stats.subjects,    icon: icons.subjects,    gradient: 'bg-violet-500',  to: '/subjects'          },
+    { label: 'Batches',      value: stats.batches,     icon: icons.batches,     gradient: 'bg-rose-500',    to: '/batches'           },
+    { label: 'Timetables',   value: stats.timetables,  icon: icons.timetables,  gradient: 'bg-sky-500',     to: '/timetables'        },
+  ];
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   return (
-    <div className="px-4 sm:px-0">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-indigo-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Departments</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.departments}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <p className="text-sm text-slate-500 font-medium mb-1">{greeting()},</p>
+          <h1 className="text-2xl font-bold text-slate-800">{user?.name} 👋</h1>
+          <p className="text-slate-500 text-sm mt-1">Here's what's happening with your timetables today.</p>
         </div>
+        <Link
+          to="/generate-timetable"
+          className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 self-start sm:self-auto"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Generate Timetable
+        </Link>
+      </div>
 
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-green-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Classrooms</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.classrooms}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-yellow-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Faculties</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.faculties}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-purple-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Subjects</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.subjects}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-red-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Batches</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.batches}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="p-5">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="rounded-md bg-blue-500 p-3">
-                  <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-              </div>
-              <div className="ml-5 w-0 flex-1">
-                <dl>
-                  <dt className="text-sm font-medium text-gray-500 truncate">Timetables</dt>
-                  <dd className="text-3xl font-semibold text-gray-900">{stats.timetables}</dd>
-                </dl>
-              </div>
-            </div>
-          </div>
+      {/* Stats grid */}
+      <div>
+        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Overview</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {statCards.map((card) => (
+            <StatCard key={card.label} {...card} />
+          ))}
         </div>
       </div>
 
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Recent Timetables</h2>
+      {/* Recent timetables */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Recent Timetables</h2>
+          <Link to="/timetables" className="text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors">
+            View all →
+          </Link>
+        </div>
+
         {timetables.length === 0 ? (
-          <div className="bg-white shadow rounded-lg p-6 text-center text-gray-500">
-            No timetables generated yet
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-12 text-center">
+            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <p className="text-slate-500 text-sm font-medium">No timetables generated yet</p>
+            <p className="text-slate-400 text-xs mt-1">Click "Generate Timetable" to get started</p>
           </div>
         ) : (
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
-              {timetables.map((timetable) => (
-                <li key={timetable.id}>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="divide-y divide-slate-50">
+              {timetables.map((tt, idx) => {
+                const sc = statusConfig[tt.status] || { label: tt.status, cls: 'badge-gray' };
+                return (
                   <Link
-                    to={`/timetable/${timetable.id}`}
-                    className="block hover:bg-gray-50 px-4 py-4 sm:px-6"
+                    key={tt.id}
+                    to={`/timetable/${tt.id}`}
+                    className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors group"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-indigo-600 truncate">
-                          {timetable.name}
-                        </p>
-                        <p className="mt-1 text-sm text-gray-500">
-                          Semester {timetable.semester} • Score: {timetable.score?.toFixed(2) || 'N/A'}
-                        </p>
-                      </div>
-                      <div className="ml-4">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            timetable.status === 'APPROVED'
-                              ? 'bg-green-100 text-green-800'
-                              : timetable.status === 'LOCKED'
-                              ? 'bg-gray-100 text-gray-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
-                        >
-                          {timetable.status}
-                        </span>
-                      </div>
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-indigo-600">{idx + 1}</span>
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+                        {tt.name}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Semester {tt.semester}
+                        {tt.score != null && <> &bull; Score: <span className="font-medium">{tt.score.toFixed(2)}</span></>}
+                      </p>
+                    </div>
+                    <span className={sc.cls}>{sc.label}</span>
+                    <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all duration-200 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   </Link>
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

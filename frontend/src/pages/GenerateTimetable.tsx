@@ -172,7 +172,7 @@ const GenerateTimetable: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Generated Timetables</h2>
           <div className="space-y-4">
-            {timetables.map((timetable, index) => (
+            {timetables.map((timetable) => (
               <div key={timetable.id} className="bg-white shadow rounded-lg p-6">
                 <div className="flex justify-between items-start mb-4">
                   <div>

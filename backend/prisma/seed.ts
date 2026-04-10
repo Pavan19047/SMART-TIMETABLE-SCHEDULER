@@ -117,7 +117,7 @@ async function main() {
         email: fac.email,
         departmentId: fac.dept,
         maxClassesPerDay: 4,
-        weeklyLoadLimit: 20,
+        weeklyLoadLimit: 16, // ASSISTANT_PROFESSOR default
         averageLeavesPerMonth: 2,
       },
     });

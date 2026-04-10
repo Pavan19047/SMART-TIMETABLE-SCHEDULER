@@ -32,6 +32,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+});
+
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use.`);
+    console.error(`   Run this to free it:  npx kill-port ${PORT}`);
+    console.error(`   Or set a different PORT in your .env file.\n`);
+    process.exit(1);
+  } else {
+    throw error;
+  }
 });

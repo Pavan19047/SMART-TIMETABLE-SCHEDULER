@@ -5,6 +5,17 @@ import { AuthRequest } from '../middleware/auth.middleware';
 
 const prisma = new PrismaClient();
 
+// Weekly load limits per designation (hours per week)
+const DESIGNATION_WEEKLY_LOAD: Record<string, number> = {
+  ASSISTANT_PROFESSOR: 16,
+  PROFESSOR: 14,
+  HOD: 12,
+};
+
+const getWeeklyLoadForDesignation = (designation: string): number => {
+  return DESIGNATION_WEEKLY_LOAD[designation] ?? 16;
+};
+
 export const createFaculty = async (req: AuthRequest, res: Response) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -16,18 +27,24 @@ export const createFaculty = async (req: AuthRequest, res: Response) => {
       name,
       email,
       departmentId,
+      designation,
       maxClassesPerDay,
       weeklyLoadLimit,
       averageLeavesPerMonth,
     } = req.body;
+
+    const resolvedDesignation = designation || 'ASSISTANT_PROFESSOR';
+    // Auto-derive weeklyLoadLimit from designation unless explicitly overridden
+    const resolvedWeeklyLoad = weeklyLoadLimit ?? getWeeklyLoadForDesignation(resolvedDesignation);
 
     const faculty = await prisma.faculty.create({
       data: {
         name,
         email,
         departmentId,
+        designation: resolvedDesignation as any,
         maxClassesPerDay: maxClassesPerDay || 4,
-        weeklyLoadLimit: weeklyLoadLimit || 20,
+        weeklyLoadLimit: resolvedWeeklyLoad,
         averageLeavesPerMonth: averageLeavesPerMonth || 2,
       },
       include: {
@@ -102,10 +119,17 @@ export const updateFaculty = async (req: AuthRequest, res: Response) => {
       name,
       email,
       departmentId,
+      designation,
       maxClassesPerDay,
       weeklyLoadLimit,
       averageLeavesPerMonth,
     } = req.body;
+
+    // If designation changed, auto-update weeklyLoadLimit unless explicitly provided
+    let resolvedWeeklyLoad = weeklyLoadLimit;
+    if (designation && weeklyLoadLimit === undefined) {
+      resolvedWeeklyLoad = getWeeklyLoadForDesignation(designation);
+    }
 
     const faculty = await prisma.faculty.update({
       where: { id },
@@ -113,8 +137,9 @@ export const updateFaculty = async (req: AuthRequest, res: Response) => {
         ...(name && { name }),
         ...(email && { email }),
         ...(departmentId && { departmentId }),
+        ...(designation && { designation: designation as any }),
         ...(maxClassesPerDay && { maxClassesPerDay }),
-        ...(weeklyLoadLimit && { weeklyLoadLimit }),
+        ...(resolvedWeeklyLoad !== undefined && { weeklyLoadLimit: resolvedWeeklyLoad }),
         ...(averageLeavesPerMonth !== undefined && { averageLeavesPerMonth }),
       },
       include: {

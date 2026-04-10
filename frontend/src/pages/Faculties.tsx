@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
 
+const DESIGNATION_WEEKLY_LOAD: Record<string, number> = {
+  ASSISTANT_PROFESSOR: 12,
+  PROFESSOR: 14,
+  HOD: 16,
+};
+
+const DESIGNATION_LABELS: Record<string, string> = {
+  ASSISTANT_PROFESSOR: 'Assistant Professor',
+  PROFESSOR: 'Professor',
+  HOD: 'HOD',
+};
+
 const Faculties: React.FC = () => {
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -8,7 +20,7 @@ const Faculties: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', departmentId: '', maxClassesPerDay: '4', weeklyLoadLimit: '20' });
+  const [formData, setFormData] = useState({ name: '', email: '', departmentId: '', designation: 'ASSISTANT_PROFESSOR', maxClassesPerDay: '4', weeklyLoadLimit: '12' });
   const [managingFaculty, setManagingFaculty] = useState<any>(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
@@ -40,8 +52,12 @@ const Faculties: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/faculties', { ...formData, maxClassesPerDay: parseInt(formData.maxClassesPerDay), weeklyLoadLimit: parseInt(formData.weeklyLoadLimit) });
-      setFormData({ name: '', email: '', departmentId: '', maxClassesPerDay: '4', weeklyLoadLimit: '20' });
+      await api.post('/faculties', { 
+        ...formData, 
+        maxClassesPerDay: parseInt(formData.maxClassesPerDay), 
+        weeklyLoadLimit: parseInt(formData.weeklyLoadLimit),
+      });
+      setFormData({ name: '', email: '', departmentId: '', designation: 'ASSISTANT_PROFESSOR', maxClassesPerDay: '4', weeklyLoadLimit: '12' });
       setShowForm(false);
       fetchData();
     } catch (error: any) {
@@ -129,8 +145,34 @@ const Faculties: React.FC = () => {
             <div><label className="block text-sm font-medium">Name</label><input type="text" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} /></div>
             <div><label className="block text-sm font-medium">Email</label><input type="email" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></div>
             <div><label className="block text-sm font-medium">Department</label><select required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.departmentId} onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}><option value="">Select Department</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+            <div>
+              <label className="block text-sm font-medium">Designation</label>
+              <select
+                required
+                className="mt-1 block w-full rounded-md border px-3 py-2"
+                value={formData.designation}
+                onChange={(e) => {
+                  const desig = e.target.value;
+                  setFormData({ ...formData, designation: desig, weeklyLoadLimit: String(DESIGNATION_WEEKLY_LOAD[desig] ?? 12) });
+                }}
+              >
+                <option value="ASSISTANT_PROFESSOR">Assistant Professor (12 hrs/week)</option>
+                <option value="PROFESSOR">Professor (14 hrs/week)</option>
+                <option value="HOD">HOD (16 hrs/week)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Weekly Load Limit (hrs)</label>
+              <input
+                type="number"
+                required
+                readOnly
+                className="mt-1 block w-full rounded-md border px-3 py-2 bg-gray-50 text-gray-500"
+                value={formData.weeklyLoadLimit}
+              />
+              <p className="text-xs text-gray-400 mt-1">Auto-set by designation (Asst. Prof: 12 · Prof: 14 · HOD: 16)</p>
+            </div>
             <div><label className="block text-sm font-medium">Max Classes/Day</label><input type="number" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.maxClassesPerDay} onChange={(e) => setFormData({ ...formData, maxClassesPerDay: e.target.value })} /></div>
-            <div><label className="block text-sm font-medium">Weekly Load Limit</label><input type="number" required className="mt-1 block w-full rounded-md border px-3 py-2" value={formData.weeklyLoadLimit} onChange={(e) => setFormData({ ...formData, weeklyLoadLimit: e.target.value })} /></div>
             <div className="flex space-x-3">
               <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md">Create</button>
               <button type="button" onClick={() => setShowForm(false)} className="bg-gray-300 px-4 py-2 rounded-md">Cancel</button>
@@ -210,10 +252,15 @@ const Faculties: React.FC = () => {
             {filteredFaculties.map((fac) => (
               <li key={fac.id} className="px-6 py-4">
                 <div className="flex justify-between items-start">
-                  <div>
+                <div>
                     <h3 className="font-medium">{fac.name}</h3>
                     <p className="text-sm text-gray-500">{fac.email} • {fac.department.name}</p>
-                    <p className="text-sm text-gray-400">Max: {fac.maxClassesPerDay}/day • Weekly: {fac.weeklyLoadLimit}</p>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-medium">
+                        {DESIGNATION_LABELS[fac.designation] ?? fac.designation}
+                      </span>
+                      <span className="text-xs text-gray-400">{fac.maxClassesPerDay} classes/day • {fac.weeklyLoadLimit} hrs/week</span>
+                    </div>
                   </div>
                   <div className="flex space-x-2">
                     <button 

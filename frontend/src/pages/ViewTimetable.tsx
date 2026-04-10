@@ -4,17 +4,18 @@ import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+// Structure: 2 slots | SHORT BREAK | 2 slots | LUNCH | 1 slot | SHORT BREAK | 2 slots
 const TIME_SLOTS = [
-  { label: 'HOUR 1', start: '09:00', end: '10:00', isBreak: false },
-  { label: 'HOUR 2', start: '10:00', end: '11:00', isBreak: false },
-  { label: 'SHORT BREAK', start: '11:00', end: '11:15', isBreak: true },
-  { label: 'HOUR 3', start: '11:15', end: '12:15', isBreak: false },
-  { label: 'HOUR 4', start: '12:15', end: '13:15', isBreak: false },
-  { label: 'LUNCH BREAK', start: '13:15', end: '14:00', isBreak: true },
-  { label: 'HOUR 5', start: '14:00', end: '15:00', isBreak: false },
-  { label: 'HOUR 6', start: '15:00', end: '16:00', isBreak: false },
-  { label: 'SHORT BREAK', start: '16:00', end: '16:15', isBreak: true },
-  { label: 'HOUR 7', start: '16:15', end: '17:15', isBreak: false },
+  { label: 'HOUR 1',       start: '09:00', end: '09:50', isBreak: false },
+  { label: 'HOUR 2',       start: '09:55', end: '10:45', isBreak: false },
+  { label: 'SHORT BREAK',  start: '10:45', end: '11:00', isBreak: true  },
+  { label: 'HOUR 3',       start: '11:00', end: '11:50', isBreak: false },
+  { label: 'HOUR 4',       start: '11:55', end: '12:45', isBreak: false },
+  { label: 'LUNCH BREAK',  start: '12:45', end: '13:30', isBreak: true  },
+  { label: 'HOUR 5',       start: '13:30', end: '14:20', isBreak: false },
+  { label: 'SHORT BREAK',  start: '14:20', end: '14:35', isBreak: true  },
+  { label: 'HOUR 6',       start: '14:35', end: '15:25', isBreak: false },
+  { label: 'HOUR 7',       start: '15:30', end: '16:20', isBreak: false },
 ];
 
 const ViewTimetable: React.FC = () => {
@@ -116,32 +117,41 @@ const ViewTimetable: React.FC = () => {
   // Check if a class spans multiple slots (for proper display)
   const getColSpan = (entry: any) => {
     if (!entry) return 1;
-    
     const toMinutes = (time: string) => {
       const [hours, mins] = time.split(':').map(Number);
       return hours * 60 + mins;
     };
-    
     const duration = toMinutes(entry.endTime) - toMinutes(entry.startTime);
-    
-    // For 2-hour classes (120 minutes), span 2 columns
-    if (duration >= 115) return 2; // Account for slight variations
+    // Lab sessions are 105 min (1h45m) and span 2 slots
+    if (duration >= 100) return 2;
     return 1;
   };
 
-  // Track which slots have been rendered as part of a multi-column span
-  const renderedSlots = new Set<string>();
-
-  const getCardColor = (index: number) => {
-    const colors = [
-      'bg-emerald-100 border-emerald-300',
-      'bg-cyan-100 border-cyan-300',
-      'bg-teal-100 border-teal-300',
+  // Stable color per subject so Theory and Lab sessions of same subject match
+  const getSubjectColor = (subjectId: string, subjectType: string) => {
+    const theoryColors = [
       'bg-blue-100 border-blue-300',
       'bg-indigo-100 border-indigo-300',
-      'bg-purple-100 border-purple-300',
+      'bg-sky-100 border-sky-300',
+      'bg-violet-100 border-violet-300',
+      'bg-cyan-100 border-cyan-300',
+      'bg-slate-100 border-slate-300',
     ];
-    return colors[index % colors.length];
+    const labColors = [
+      'bg-orange-100 border-orange-300',
+      'bg-amber-100 border-amber-300',
+      'bg-rose-100 border-rose-300',
+      'bg-fuchsia-100 border-fuchsia-300',
+      'bg-pink-100 border-pink-300',
+      'bg-red-100 border-red-300',
+    ];
+    // Hash subject ID to a stable index
+    let hash = 0;
+    for (let i = 0; i < subjectId.length; i++) hash = (hash * 31 + subjectId.charCodeAt(i)) & 0xffffff;
+    const idx = Math.abs(hash) % 6;
+    if (subjectType === 'PRACTICAL') return labColors[idx];
+    if (subjectType === 'THEORY_CUM_PRACTICAL') return theoryColors[idx]; // same color for both theory+lab sessions
+    return theoryColors[idx];
   };
 
   return (
@@ -268,20 +278,25 @@ const ViewTimetable: React.FC = () => {
                           className="p-2 border-r border-gray-200 align-top"
                         >
                           {classEntry ? (
-                            <div className={`rounded-lg p-3 border-2 shadow-sm hover:shadow-md transition-shadow ${getCardColor(slotIndex)}`}>
+                            <div className={`rounded-lg p-3 border-2 shadow-sm hover:shadow-md transition-shadow ${getSubjectColor(classEntry.subject.id, classEntry.subject.type)}`}>
                               <div className="flex items-center justify-between mb-1">
                                 <div className="text-sm font-bold text-gray-900">
                                   {classEntry.subject.code}
                                 </div>
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                                  classEntry.subject.type === 'PRACTICAL' ? 'bg-orange-200 text-orange-800' :
-                                  classEntry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'bg-teal-200 text-teal-800' :
-                                  'bg-blue-200 text-blue-800'
-                                }`}>
-                                  {classEntry.subject.type === 'PRACTICAL' ? 'LAB' :
-                                   classEntry.subject.type === 'THEORY_CUM_PRACTICAL' ? 'T+L' :
-                                   'TH'}
-                                </span>
+                                {(() => {
+                                  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+                                  const dur = toMin(classEntry.endTime) - toMin(classEntry.startTime);
+                                  const isLabSession =
+                                    classEntry.subject.type === 'PRACTICAL' ||
+                                    (classEntry.subject.type === 'THEORY_CUM_PRACTICAL' && dur > 60);
+                                  return (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                      isLabSession ? 'bg-orange-200 text-orange-800' : 'bg-blue-200 text-blue-800'
+                                    }`}>
+                                      {isLabSession ? 'LAB' : 'TH'}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               <div className="text-xs text-gray-700 font-medium mb-1">
                                 {classEntry.faculty.name}
